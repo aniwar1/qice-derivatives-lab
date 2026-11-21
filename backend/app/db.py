@@ -98,6 +98,19 @@ dashboard_snapshots = Table(
 Index("ix_dashboard_snapshots_created", desc(dashboard_snapshots.c.created_at))
 
 
+research_publications = Table(
+    "research_publications",
+    metadata,
+    Column("run_id", String(36), ForeignKey("strategy_runs.id"), primary_key=True),
+    Column("mode", String(24), nullable=False),
+    Column("product", String(3), nullable=False),
+    Column("published_at", DateTime(timezone=True), nullable=False),
+    Column("payload", JSON, nullable=False),
+)
+Index("ix_research_publications_scope", research_publications.c.mode,
+      research_publications.c.product, research_publications.c.published_at)
+
+
 class ActiveRunConflict(RuntimeError):
     def __init__(self, active_run_id: str | None) -> None:
         super().__init__("a strategy refresh is already active")
@@ -264,7 +277,9 @@ class StrategyStore:
             )
             return int(result.scalar_one())
 
-    async def complete_run(self, run_id: str, result_payload: dict[str, Any]) -> None:
+    async def complete_run(
+        self, run_id: str, result_payload: dict[str, Any], *, research: dict[str, Any] | None = None,
+    ) -> None:
         async with self.engine.begin() as connection:
             changed = await connection.execute(
                 update(strategy_runs)
@@ -278,6 +293,14 @@ class StrategyStore:
             )
             if changed.rowcount != 1:
                 raise InvalidRunTransition(f"run {run_id} is not running")
+            if research is not None:
+                await connection.execute(insert(research_publications).values(
+                    run_id=run_id,
+                    mode=research["mode"],
+                    product=research["product"] or "",
+                    published_at=datetime.fromisoformat(result_payload["updated_at"]).astimezone(timezone.utc),
+                    payload=research,
+                ))
             await connection.execute(
                 insert(run_events).values(
                     run_id=run_id,
@@ -366,6 +389,35 @@ class StrategyStore:
                 )
             ).mappings().first()
         return self._run_mapping(row) if row else None
+
+    async def list_recent_runs(self, limit: int) -> list[dict[str, Any]]:
+        async with self.engine.connect() as connection:
+            rows = (await connection.execute(
+                select(strategy_runs)
+                .order_by(desc(strategy_runs.c.created_at), desc(strategy_runs.c.id))
+                .limit(limit)
+            )).mappings().all()
+        return [self._run_mapping(row) for row in rows]
+
+    async def research_publication(self, run_id: str) -> dict[str, Any] | None:
+        async with self.engine.connect() as connection:
+            return await connection.scalar(select(research_publications.c.payload).where(
+                research_publications.c.run_id == run_id,
+            ))
+
+    async def previous_research_publication(self, run_id: str) -> tuple[str, dict[str, Any]] | None:
+        current = research_publications.alias("current_publication")
+        async with self.engine.connect() as connection:
+            row = (await connection.execute(
+                select(research_publications.c.run_id, research_publications.c.payload)
+                .join(current, and_(current.c.mode == research_publications.c.mode,
+                                    current.c.product == research_publications.c.product))
+                .where(current.c.run_id == run_id,
+                       research_publications.c.published_at < current.c.published_at)
+                .order_by(desc(research_publications.c.published_at))
+                .limit(1)
+            )).first()
+        return (row.run_id, row.payload) if row else None
 
     async def get_events_after(self, run_id: str, event_id: int) -> list[dict[str, Any]]:
         async with self.engine.connect() as connection:

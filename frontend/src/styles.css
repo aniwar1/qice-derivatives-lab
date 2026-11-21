@@ -750,3 +750,27 @@ code {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
 }
+
+.research-panel { margin-block: 24px; padding: clamp(14px, 3vw, 28px); border: 1px solid var(--line); background: var(--panel); }
+.research-panel h2 { margin-top: 0; }
+.research-panel h3 { font-size: 1rem; margin-block: 0 10px; }
+.research-panel p { color: var(--ink-soft); }
+.research-panel a { color: var(--signal); }
+.research-panel summary { cursor: pointer; }
+.research-section { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 16px; }
+.research-controls, .research-control { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.research-control { color: var(--ink-soft); }
+.research-control select, .research-control input { max-width: 100%; padding: 8px; background: var(--panel-raised); border: 1px solid var(--line-strong); color: var(--ink); font: inherit; }
+.research-opportunities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 12px; }
+.research-opportunities article { padding: 14px; border: 1px solid var(--line); background: var(--panel-raised); overflow-wrap: anywhere; }
+.research-opportunities h4 { margin: 0; }
+.research-opportunities dl { display: flex; gap: 12px; flex-wrap: wrap; }
+.research-opportunities dt, .research-observations span { color: var(--ink-soft); font-size: 0.85rem; }
+.research-opportunities dd { margin: 4px 0 0; }
+.research-observations { list-style: none; padding: 0; }
+.research-observations li { border-top: 1px solid var(--line); padding: 10px 0; display: flex; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.research-observations details { width: 100%; }
+.research-observations code { overflow-wrap: anywhere; }
+.research-table-wrap { overflow-x: auto; }
+.research-table-wrap table { border-collapse: collapse; margin-top: 8px; text-align: right; }
+.research-table-wrap :is(th, td) { border-bottom: 1px solid var(--line); padding: 4px 10px; }

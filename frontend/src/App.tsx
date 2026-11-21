@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AsyncState } from "./components/AsyncState";
 import { DecisionRail } from "./components/DecisionRail";
 import { HelpTip } from "./components/HelpTip";
+import { ResearchPanel } from "./components/ResearchPanel";
 import { MarketCatalog } from "./components/MarketCatalog";
 import { createStrategyRun, getDashboard, getStrategyRun, subscribeToRun } from "./lib/api";
 import { directionLabel, formatTimestamp, humanStatus, normalizeDashboard } from "./lib/model";
@@ -46,6 +47,7 @@ function App() {
   const [runMessage, setRunMessage] = useState("");
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [product, setProduct] = useState("");
+  const [researchRevision, setResearchRevision] = useState(0);
   const closeStream = useRef<null | (() => void)>(null);
   const terminalRunId = useRef<string | null>(null);
 
@@ -82,6 +84,7 @@ function App() {
       closeStream.current?.();
       closeStream.current = null;
       setActiveRunId(null);
+      setResearchRevision((value) => value + 1);
       if (event.type === "failed") {
         setError(event.message || "策略更新失败，请检查证据来源后重试。");
         setRunMessage("");
@@ -277,6 +280,7 @@ function App() {
             onAction={codexNeedsLogin ? undefined : () => void startRun()}
             busy={isRunning}
           />
+          <ResearchPanel revision={researchRevision} />
           {!!dashboard?.products.length && <MarketCatalog products={dashboard.products} />}
           {dashboard && <DecisionRail nodes={dashboard.nodes} activeId={activeNodeId} onNodeActivate={showLinkedPanel} />}
         </div>
@@ -433,6 +437,7 @@ function App() {
             </HelpTip>
           </section>
         )}
+        <ResearchPanel revision={researchRevision} />
         {!!dashboard.products.length && <MarketCatalog products={dashboard.products} />}
       </main>
     </div>

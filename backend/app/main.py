@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 import math
 from typing import AsyncIterator
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi import FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import requests
 
@@ -128,6 +128,48 @@ def create_app(
             "observed_at": observed.replace(tzinfo=ZoneInfo("Asia/Shanghai")).isoformat(),
             "source_url": quote["source_url"],
         }
+
+    @app.get("/api/research/runs")
+    async def research_runs(limit: int = Query(30, ge=1, le=100)) -> list[dict]:
+        return await service.research_runs(limit)
+
+    @app.get("/api/research/runs/{run_id}")
+    async def research_detail(run_id: str) -> dict:
+        try:
+            detail = await service.research_detail(run_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail="研究档案未通过完整性校验。") from exc
+        if detail is None:
+            raise HTTPException(status_code=404, detail="研究任务不存在。")
+        return detail
+
+    @app.get("/api/research/runs/{run_id}/evidence/{digest}")
+    async def research_evidence(run_id: str, digest: str) -> Response:
+        if await service.get_run(run_id) is None:
+            raise HTTPException(status_code=404, detail="研究任务不存在。")
+        try:
+            blob = await asyncio.to_thread(service.research_archive.evidence, run_id, digest)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail="行情原件未通过完整性校验。") from exc
+        if blob is None:
+            raise HTTPException(status_code=404, detail="本轮没有该行情原件。")
+        return Response(blob, media_type="application/json", headers={
+            "Content-Disposition": 'attachment; filename="market-evidence.json"',
+            "X-Content-Type-Options": "nosniff",
+        })
+
+    @app.get("/api/research/runs/{run_id}/replay")
+    async def replay(run_id: str, at: datetime | None = None) -> dict:
+        cutoff = at or datetime.now(timezone.utc)
+        if cutoff.utcoffset() is None or cutoff > datetime.now(timezone.utc):
+            raise HTTPException(status_code=422, detail="请选择包含时区且不晚于当前时间的回放时点。")
+        try:
+            report = await service.replay(run_id, cutoff)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail="研究档案未通过回放校验。") from exc
+        if report is None:
+            raise HTTPException(status_code=404, detail="研究任务不存在。")
+        return report
 
     @app.get("/api/strategy/latest")
     async def latest_strategy() -> dict:

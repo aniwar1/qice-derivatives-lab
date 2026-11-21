@@ -55,7 +55,7 @@ class CodexWorkspace:
         if _SAFE_RUN_ID.fullmatch(run_id) is None:
             raise ValueError("strategy run id is not a safe workspace name")
 
-        temporary_parent = Path(tempfile.mkdtemp(prefix=f"cfda-codex-{run_id}-"))
+        temporary_parent = Path(tempfile.mkdtemp(prefix=f"cfda-codex-{run_id}-")).resolve()
         stage_root = temporary_parent / "workspace"
         stage_root.mkdir()
         try:

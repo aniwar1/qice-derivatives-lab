@@ -231,5 +231,6 @@ def settings(tmp_path: Path) -> Settings:
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'app.db'}",
         codex_bin="codex",
         auto_refresh_if_empty=False,
+        capture_market_evidence=False,
         sse_poll_milliseconds=100,
     )

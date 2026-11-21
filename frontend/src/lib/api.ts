@@ -1,5 +1,8 @@
 import type {
   RunEvent,
+  ResearchDetail,
+  ResearchReplay,
+  ResearchRun,
   MarketQuote,
   StrategyRunAccepted,
   StrategyRunRequest,
@@ -94,4 +97,15 @@ export const subscribeToRun = (
   eventNames.forEach((name) => source.addEventListener(name, consume as EventListener));
   source.onerror = onConnectionError;
   return () => source.close();
+};
+
+export const getResearchRuns = async (signal?: AbortSignal): Promise<ResearchRun[]> =>
+  readJson(await fetch(endpoint("/api/research/runs"), { signal }));
+
+export const getResearchDetail = async (runId: string, signal?: AbortSignal): Promise<ResearchDetail> =>
+  readJson(await fetch(endpoint(`/api/research/runs/${encodeURIComponent(runId)}`), { signal }));
+
+export const getResearchReplay = async (runId: string, at: string, signal?: AbortSignal): Promise<ResearchReplay> => {
+  const query = at ? `?${new URLSearchParams({ at })}` : "";
+  return readJson(await fetch(endpoint(`/api/research/runs/${encodeURIComponent(runId)}/replay${query}`), { signal }));
 };

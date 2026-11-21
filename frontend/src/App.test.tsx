@@ -5,6 +5,7 @@ import { createStrategyRun, getDashboard, getStrategyRun, subscribeToRun } from 
 
 vi.mock("./lib/api", () => ({
   getDashboard: vi.fn(),
+  getResearchRuns: vi.fn().mockResolvedValue([]),
   getStrategyRun: vi.fn(),
   createStrategyRun: vi.fn(),
   subscribeToRun: vi.fn(),

@@ -120,3 +120,77 @@ export interface RunEvent {
   occurred_at?: string;
   payload?: unknown;
 }
+
+export interface ResearchRun {
+  run_id: string;
+  status: string;
+  created_at: string;
+  mode: string;
+  product: string | null;
+  decision: string | null;
+}
+
+export interface ResearchObservation {
+  product: string;
+  contract: string;
+  observed_at: string;
+  available_at: string;
+  price: number;
+  source: string;
+  artifact_sha256: string;
+  daily_status: string | null;
+  daily_bars: Array<{
+    date: string; open: number | null; high: number | null; low: number | null; close: number | null;
+  }>;
+}
+
+export interface ResearchOpportunity {
+  product: string;
+  product_name: string | null;
+  contract: string;
+  option_symbol: string;
+  decision: "long_call" | "long_put";
+  entry_timing: string;
+  thesis: string;
+  why_now: string;
+  counterevidence: string;
+  trigger: number | null;
+  invalidation: number | null;
+  target: number | null;
+  reassess_by: string;
+  evidence_gaps: string[];
+  option_sources: Array<{ url: string; title: string }>;
+}
+
+export interface ResearchDetail {
+  run: StrategyRunView & {
+    result?: { strategy: {
+      decision: string;
+      as_of: string;
+      rationale: { thesis: string; strongest_counterevidence: string };
+      evidence_gaps: string[];
+    } } | null;
+  };
+  archive: {
+    captured_at: string;
+    expected_products: string[];
+    observations: ResearchObservation[];
+    gaps: Record<string, string>;
+  } | null;
+  archive_sha256: string | null;
+  candidate_status: string;
+  excluded_count: number;
+  opportunities: ResearchOpportunity[];
+  comparison: { previous_run_id: string; added: string[]; removed: string[]; changed: string[] } | null;
+}
+
+export interface ResearchReplay {
+  review_as_of: string;
+  evidence_as_of: string;
+  validation: string;
+  observations: ResearchObservation[];
+  excluded_after_cutoff: number;
+  followup: ResearchObservation[];
+  followup_truncated: boolean;
+  invalidation_observed: ResearchObservation | null;
+}

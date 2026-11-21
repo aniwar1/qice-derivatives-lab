@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -13,6 +14,8 @@ from .db import StrategyStore
 from .freshness import LatestStrategyResolution, resolve_latest_strategy
 from .models import AgentStrategyPayload, LatestStrategyRecord, StrategyRunAccepted, StrategyRunRequest
 from .prompting import build_strategy_prompt
+from .opportunities import compare_opportunities, compile_opportunities
+from .research_archive import ResearchArchive, ResearchCapture, capture_market
 
 
 BJT = ZoneInfo("Asia/Shanghai")
@@ -45,11 +48,13 @@ class StrategyService:
         self.gateway = gateway
         self.domain = domain or DomainSnapshotProvider(settings.workspace_root)
         self.dashboard = DashboardProjector(store, gateway, self.domain)
+        self.research_archive = ResearchArchive(settings.workspace_root / "local-data" / "research.duckdb")
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._stopping = False
 
     async def start(self) -> None:
         await self.store.initialize()
+        await asyncio.to_thread(self.research_archive.initialize)
         if self.settings.auto_refresh_if_empty:
             latest, active = await asyncio.gather(
                 self.store.get_latest_completed(), self.store.get_active_run()
@@ -128,6 +133,16 @@ class StrategyService:
                     "codex_workspace_unavailable",
                     "无法建立 Codex 隔离工作区，旧策略保持不变。",
                 ) from exc
+            capture: ResearchCapture | None = None
+            archive_digest: str | None = None
+            if self.settings.capture_market_evidence:
+                expected = (request.product,) if request.product else allowed_products
+                capture, artifacts = await capture_market(codex_workspace, run_id, request, expected)
+                archive_digest = await asyncio.to_thread(self.research_archive.save, capture, artifacts)
+                await self.store.append_event(
+                    run_id, stage="evidence", message=f"已冻结 {len(capture.observations)} 条行情证据，{len(capture.gaps)} 个品种存在缺口。",
+                    payload={"research_archive_sha256": archive_digest},
+                )
             decision_clock = datetime.now(tz=BJT)
             prompt = build_strategy_prompt(
                 request,
@@ -135,6 +150,7 @@ class StrategyService:
                 now=decision_clock,
                 allowed_products=allowed_products,
                 run_dir=codex_workspace.relative_run_dir,
+                frozen_capture=capture is not None,
             )
             await self.store.append_event(
                 run_id,
@@ -199,7 +215,15 @@ class StrategyService:
                 strategy=validated_payload,
             )
             record_payload = record.model_dump(mode="json")
-            await self.store.complete_run(run_id, record_payload)
+            opportunities = compile_opportunities(
+                validated_payload, request, capture, codex_workspace.run_dir,
+                lambda item, scope: self._validate_result(item, scope, allowed_products),
+            )
+            await self.store.complete_run(run_id, record_payload, research={
+                "mode": request.mode, "product": request.product,
+                "archive_sha256": archive_digest, "allowed_products": allowed_products,
+                **opportunities,
+            })
             try:
                 snapshot = await self.dashboard.project()
                 await self.store.save_dashboard_snapshot(run_id, snapshot)
@@ -315,8 +339,10 @@ class StrategyService:
         result: AgentStrategyPayload,
         request: StrategyRunRequest,
         allowed_products: tuple[str, ...],
+        *,
+        clock: datetime | None = None,
     ) -> None:
-        now = datetime.now(tz=timezone.utc)
+        now = (clock or datetime.now(tz=timezone.utc)).astimezone(timezone.utc)
         as_of = result.as_of.astimezone(timezone.utc)
         quality_review = result.quality_review
         if quality_review.critic_revisions != 1:
@@ -389,7 +415,7 @@ class StrategyService:
                     expected_product=result.product,
                     expected_contract=result.analysis_contract,
                     packet_observed_at=result.as_of,
-                    now=datetime.now(tz=BJT),
+                    now=now.astimezone(BJT),
                 )
             except Exception as exc:
                 raise StrategyValidationError("session-aware daily bar failed domain validation") from exc
@@ -415,6 +441,88 @@ class StrategyService:
                 raise StrategyValidationError("option quote is not current for this decision")
             if option.expiration_date <= result.as_of.date():
                 raise StrategyValidationError("long option must expire after the decision date")
+
+    async def research_runs(self, limit: int) -> list[dict]:
+        rows = await self.store.list_recent_runs(limit)
+        return [{
+            "run_id": row["id"], "status": row["status"], "created_at": row["created_at"],
+            "mode": row["request"]["mode"], "product": row["request"].get("product"),
+            "decision": (row.get("result") or {}).get("strategy", {}).get("decision"),
+        } for row in rows]
+
+    async def research_detail(self, run_id: str) -> dict | None:
+        run = await self.get_run(run_id)
+        if run is None:
+            return None
+        info = await self.store.research_publication(run_id)
+        archived = await asyncio.to_thread(self.research_archive.get, run_id)
+        archive, digest = archived if archived else (None, None)
+        if info and info["archive_sha256"] and info["archive_sha256"] != digest:
+            raise ValueError("任务记录与研究档案摘要不匹配")
+        previous = await self.store.previous_research_publication(run_id) if info else None
+        comparison = None
+        if previous and info["candidate_status"] in ("returned", "not_requested") and previous[1]["candidate_status"] in ("returned", "not_requested"):
+            comparison = {
+                "previous_run_id": previous[0],
+                **compare_opportunities(previous[1]["opportunities"], info["opportunities"]),
+            }
+        return {
+            "run": run, "archive": archive, "archive_sha256": digest,
+            "candidate_status": info["candidate_status"] if info else "unavailable",
+            "excluded_count": info["excluded_count"] if info else 0,
+            "opportunities": info["opportunities"] if info else [], "comparison": comparison,
+        }
+
+    async def replay(self, run_id: str, cutoff: datetime) -> dict | None:
+        if cutoff.utcoffset() is None or cutoff > datetime.now(timezone.utc):
+            raise ValueError("回放时点须包含时区，且不能晚于当前时间")
+        detail = await self.research_detail(run_id)
+        if detail is None:
+            return None
+        archive = detail["archive"]
+        run = detail["run"]
+        strategy = run.result.strategy if run.result is not None else None
+        evidence_cutoff = min(cutoff, strategy.as_of) if strategy else cutoff
+        visible = [row for row in archive.observations
+                   if row.available_at <= evidence_cutoff and row.observed_at <= evidence_cutoff] if archive else []
+        checks = "no_strategy"
+        followup = []
+        invalidation_hit = None
+        if strategy and run.result.updated_at > cutoff:
+            checks = "not_published"
+        elif strategy:
+            checks = "archive_missing"
+            publication = await self.store.research_publication(run_id)
+            if archive and publication:
+                hashes = {name: sha256((self.settings.workspace_root / "config" / name).read_bytes()).hexdigest()
+                          for name in archive.policy_hashes}
+                if hashes != archive.policy_hashes:
+                    checks = "policy_changed"
+                else:
+                    try:
+                        self._validate_result(strategy, run.request, tuple(publication["allowed_products"]), clock=strategy.as_of)
+                    except StrategyValidationError:
+                        checks = "failed"
+                    else:
+                        relevant = [row for row in visible if strategy.analysis_contract is None
+                                    or row.contract == strategy.analysis_contract]
+                        checks = "passed" if relevant else "evidence_missing"
+            if strategy.analysis_contract:
+                followup = await asyncio.to_thread(
+                    self.research_archive.followup, strategy.analysis_contract, strategy.as_of, cutoff,
+                )
+            level = strategy.market_levels.invalidation
+            if level is not None and strategy.direction in ("long", "short"):
+                invalidation_hit = next((row for row in followup if (
+                    row.price <= level if strategy.direction == "long" else row.price >= level
+                )), None)
+        return {
+            "run_id": run_id, "review_as_of": cutoff, "evidence_as_of": evidence_cutoff,
+            "validation": checks, "observations": visible,
+            "excluded_after_cutoff": len(archive.observations) - len(visible) if archive else 0,
+            "followup": followup[:500], "followup_truncated": len(followup) > 500,
+            "invalidation_observed": invalidation_hit,
+        }
 
     async def get_run(self, run_id: str):
         row = await self.store.get_run(run_id)

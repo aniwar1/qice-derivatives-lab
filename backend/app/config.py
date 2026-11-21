@@ -60,6 +60,7 @@ class Settings:
     sse_heartbeat_seconds: int = 15
     sse_poll_milliseconds: int = 500
     auto_refresh_if_empty: bool = False
+    capture_market_evidence: bool = True
     prefer_codex_sdk: bool = False
     require_chatgpt_auth: bool = True
     service_name: str = "qice-local"
@@ -106,6 +107,7 @@ class Settings:
             codex_start_timeout_seconds=codex_start_timeout_seconds,
             sse_heartbeat_seconds=_int_env("CFDA_SSE_HEARTBEAT_SECONDS", 15, 5, 60),
             sse_poll_milliseconds=_int_env("CFDA_SSE_POLL_MILLISECONDS", 500, 100, 5000),
+            capture_market_evidence=_bool_env("CFDA_CAPTURE_MARKET_EVIDENCE", True),
             auto_refresh_if_empty=_bool_env("CFDA_AUTO_REFRESH_IF_EMPTY", False),
             prefer_codex_sdk=_bool_env("CFDA_PREFER_CODEX_SDK", False),
             require_chatgpt_auth=_bool_env("CFDA_REQUIRE_CHATGPT_AUTH", True),

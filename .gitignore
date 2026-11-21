@@ -13,3 +13,5 @@ frontend/dist/
 *.sqlite3*
 *.db
 *.log
+*.duckdb
+*.duckdb.wal
