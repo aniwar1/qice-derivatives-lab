@@ -1,0 +1,54 @@
+{
+  "schema_version": "decision_ledger_policy.v1",
+  "event_schema_version": "decision_ledger_event.v1",
+  "hash_algorithm": "sha256",
+  "genesis_previous_event_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "allowed_directional_views": [
+    "long",
+    "short",
+    "neutral",
+    "uncertain"
+  ],
+  "allowed_actions": [
+    "long",
+    "short",
+    "wait"
+  ],
+  "confidence_range": {
+    "minimum": "0",
+    "maximum": "1"
+  },
+  "execution_policy": {
+    "entry_count": 1,
+    "full_exit_count": 1,
+    "allow_pyramiding": false,
+    "allow_averaging_down": false,
+    "allow_rollover": false
+  },
+  "validation": {
+    "maximum_future_clock_skew_seconds": 300,
+    "require_timezone_aware_timestamps": true,
+    "require_complete_realized_costs": true,
+    "require_report_artifact_replay": true,
+    "require_report_policy_artifact_replay": true,
+    "require_execution_artifact_replay": true,
+    "require_wait_market_bars_replay": true,
+    "require_wait_point_plan_bidirectional_binding": true
+  },
+  "profit_summary": {
+    "minimum_closed_actual_trades": 20,
+    "minimum_observation_span_days": 730,
+    "require_all_due_decisions_closed": true,
+    "automatic_profit_verified": false,
+    "actual_and_wait_must_be_reported_separately": true,
+    "wait_counterfactual_is_realized_profit": false
+  },
+  "claim_boundary": {
+    "purpose": "append-only forward decision and outcome accounting",
+    "does_not_prove_positive_expectancy": true,
+    "does_not_authorize_trading": true,
+    "local_hashes_are_not_an_external_timestamp_or_signature": true,
+    "local_head_only_detects_change_relative_to_its_current_bytes": true,
+    "privileged_rewrite_of_ledger_and_head_together_is_not_detectable": true
+  }
+}

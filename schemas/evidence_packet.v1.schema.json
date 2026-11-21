@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "evidence_packet.v1.schema.json",
+  "title": "Evidence packet v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "packet_id",
+    "run_id",
+    "domain",
+    "product",
+    "analysis_contract",
+    "observed_at",
+    "valid_until",
+    "status",
+    "source_refs",
+    "facts",
+    "known_gaps",
+    "does_not_select_action"
+  ],
+  "properties": {
+    "schema_version": {"const": "evidence_packet.v1"},
+    "packet_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "domain": {
+      "enum": [
+        "market_contract",
+        "technical_structure",
+        "fundamentals_news",
+        "member_flow",
+        "option_chain",
+        "account_position",
+        "realized_trade"
+      ]
+    },
+    "product": {"type": ["string", "null"]},
+    "analysis_contract": {"type": ["string", "null"]},
+    "observed_at": {"type": "string", "format": "date-time"},
+    "valid_until": {"type": ["string", "null"], "format": "date-time"},
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["availability", "freshness", "integrity", "identity", "executability"],
+      "properties": {
+        "availability": {"enum": ["complete", "partial", "unobservable"]},
+        "freshness": {"enum": ["fresh", "stale", "not_applicable"]},
+        "integrity": {"enum": ["verified", "degraded", "unverified"]},
+        "identity": {"enum": ["verified", "degraded", "unverified"]},
+        "executability": {"enum": ["executable", "incomplete", "unobservable", "not_applicable"]}
+      }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "locator", "retrieved_at", "content_sha256"],
+        "properties": {
+          "kind": {"enum": ["url", "file"]},
+          "locator": {"type": "string", "minLength": 1},
+          "retrieved_at": {"type": "string", "format": "date-time"},
+          "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "facts": {
+      "type": "object",
+      "properties": {
+        "session_daily_bar": {"$ref": "session_aware_daily_bar.v1.schema.json"}
+      },
+      "additionalProperties": true
+    },
+    "known_gaps": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "does_not_select_action": {"const": true}
+  }
+}

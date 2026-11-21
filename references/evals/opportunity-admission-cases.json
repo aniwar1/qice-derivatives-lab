@@ -1,0 +1,484 @@
+{
+  "exercise": "全部是合成的决策行为测试输入，非市场行情、非盈利样本。只完成给定证据的判断与用户回复，不请求行情、不运行扫描、不下单、不写交易账本。报告中的来源与派生值在本练习中视作已核验，不用将合成信息冒充真实URL或发布schema。",
+  "clock": "2026-09-21T11:00:00+08:00",
+  "scope": "练习宽筛已覆盖当前22品种；除各案例列出的研究对象外，其余均不满足压缩范围。不涉及账户或仓位。每个案例独立，记录不是连续行情。",
+  "evidence": {
+    "A": {
+      "product": "PS",
+      "contract": "PS2611",
+      "price": 36490,
+      "hv5_percent": 10.09,
+      "hv20_percent": 23.02,
+      "four_day_range": [
+        36150,
+        37165
+      ],
+      "background": [
+        "库存高",
+        "下游需求疲弱"
+      ],
+      "new_facts": [
+        "两家供应商开始减产，影响量尚未完整核验"
+      ],
+      "series_iv_percent": 36.75,
+      "series_iv_samples": 8,
+      "sample_range_percent": [
+        36.04,
+        40.68
+      ],
+      "specific_option_ask_iv": null,
+      "option_expiry": null,
+      "costs": null,
+      "member_flow": "Top20当前净空，但缺三个交易日可比数据。",
+      "activation_window": null
+    },
+    "B": {
+      "product": "SI",
+      "contract": "SI2611",
+      "price": 8410,
+      "weekly_change_percent": -2.27,
+      "hv5_percent": 7.52,
+      "five_day_range_percentile_60_windows": 28,
+      "price_path": "小幅连续下跌，未出现边界反复测试或已核实启动事件。",
+      "support": [
+        8255,
+        8315
+      ],
+      "background": [
+        "供给长期过剩"
+      ],
+      "new_facts": [
+        "近期产量下降",
+        "库存下降",
+        "8400–8500出现成本区买盘"
+      ],
+      "top20_net_short": [
+        "-16332",
+        "-15098"
+      ],
+      "five_domestic_net_short_change": "增加",
+      "three_foreign": "无一致新增空头信号",
+      "specific_option_ask_iv": null,
+      "costs": null
+    },
+    "C": {
+      "product": "SA",
+      "analysis_contract": "SA2701",
+      "actual_main_contract": "SA2701",
+      "as_of": "2026-09-21T11:00:00+08:00",
+      "quote_as_of": "2026-09-21T10:59:50+08:00",
+      "underlying_price": 2016,
+      "bars": "完成历史截至9月18日；9月21日仅最新价覆盖层，没有宣称当日收盘突破。当前仍在1980–2020箱体内。",
+      "structure": {
+        "box": [
+          1980,
+          2020
+        ],
+        "sessions": 9,
+        "range_percentile_60_windows": 8,
+        "atr20_fell_percent": 38,
+        "boundary_tests": 4,
+        "hv_percent": {
+          "5": 8,
+          "20": 15,
+          "60": 25,
+          "252": 27
+        },
+        "hv_method": "同月近期60日，252日同合约日收益逐日主力拼接，ddof=1，sqrt(252)；样本及换月表已校验。",
+        "path": "低点逐次抬高至2000，卖盘回落幅度递减，上沿四次测试"
+      },
+      "fundamentals": [
+        "9月19日公告的两家检修已于今日实际停车，停产量占区域周产量12%，前三轮公报没有包含本次停产。",
+        "独立现货样本显示库存连续三周下降、今日成交价上涨，替代供应两周内不能抵达。",
+        "反向事实：全国库存仍高；另一地区有复产意向。核实复产最快15个自然日后，晚于本次3个交易日兑现窗口。"
+      ],
+      "member_flow": "同月三日价格、持仓及Top20方向变化与现货驱动一致；五家内资、三家外资逐席位原始数据已核验，仍保留套保动机未知的边界，会员行为不单独决定方向。",
+      "timing": {
+        "reassess_by": "2026-09-21T14:30:00+08:00",
+        "latest_realization_time": "2026-09-24T14:30:00+08:00",
+        "event": "新增现货供需冲击已启动，三个交易日内下一批交割流与库存数据将检验冲击是否持续。"
+      },
+      "invalidation": {
+        "execution": 1988,
+        "structure": 1980,
+        "target": 2100
+      },
+      "option": {
+        "contract": "SA2701C2000",
+        "expiry": "2026-12-05",
+        "remaining_calendar_days": 75,
+        "style": "American",
+        "pricing_model": "Black-76 European approximation; synthetic American lattice cross-check differs by <0.2 quote units",
+        "r": 0.02,
+        "bid": 73.3,
+        "ask": 73.5,
+        "ask_iv_percent": 18,
+        "book_as_of": "2026-09-21T10:59:50+08:00",
+        "bid_depth": [
+          100,
+          120,
+          150
+        ],
+        "ask_depth": [
+          100,
+          120,
+          150
+        ],
+        "volume": 2500,
+        "open_interest": 8000,
+        "multiplier": 20,
+        "tick": 0.1,
+        "public_fee_per_side_per_lot": 2,
+        "account_fee": "未读取；手续费总敏感性每手4至8元，滑点每手4元；网格按8元往返成本，另对12元核验结论不变。"
+      },
+      "relative_value": {
+        "history": "240个独立交易日、同品种60–90天期限与绝对Delta0.4–0.6归一比较；样本无前视，当前ask口径。",
+        "iv_percentile": 10,
+        "iv_median_percent": 25,
+        "same_month_nearby_strike_ask_iv_percent": [
+          18.5,
+          18,
+          18.4
+        ],
+        "next_tenor_comparable_ask_iv_percent": 20,
+        "chain_comparison": "±100邻档及下一期限均有完整盘口，深虚值方向敏感性较低，远月额外时间成本偏高。",
+        "scenario_iv_basis": "14/18/22覆盖降波、不变、部分事件重估，22来自可比期限及同类事件条件样本；没有强制回归一年HV。"
+      },
+      "cost_adjusted_scenarios": [
+        {
+          "scenario": "target_fast",
+          "futures": 2100,
+          "elapsed_calendar_days": 3,
+          "iv": 0.14,
+          "modeled_exit_bid": 115.18,
+          "net_per_quote_unit": 41.28
+        },
+        {
+          "scenario": "target_fast",
+          "futures": 2100,
+          "elapsed_calendar_days": 3,
+          "iv": 0.18,
+          "modeled_exit_bid": 126.56,
+          "net_per_quote_unit": 52.66
+        },
+        {
+          "scenario": "target_fast",
+          "futures": 2100,
+          "elapsed_calendar_days": 3,
+          "iv": 0.22,
+          "modeled_exit_bid": 138.98,
+          "net_per_quote_unit": 65.08
+        },
+        {
+          "scenario": "opposite",
+          "futures": 1980,
+          "elapsed_calendar_days": 3,
+          "iv": 0.14,
+          "modeled_exit_bid": 39.74,
+          "net_per_quote_unit": -34.16
+        },
+        {
+          "scenario": "opposite",
+          "futures": 1980,
+          "elapsed_calendar_days": 3,
+          "iv": 0.18,
+          "modeled_exit_bid": 53.64,
+          "net_per_quote_unit": -20.26
+        },
+        {
+          "scenario": "opposite",
+          "futures": 1980,
+          "elapsed_calendar_days": 3,
+          "iv": 0.22,
+          "modeled_exit_bid": 67.58,
+          "net_per_quote_unit": -6.32
+        },
+        {
+          "scenario": "flat",
+          "futures": 2016,
+          "elapsed_calendar_days": 3,
+          "iv": 0.14,
+          "modeled_exit_bid": 57.88,
+          "net_per_quote_unit": -16.02
+        },
+        {
+          "scenario": "flat",
+          "futures": 2016,
+          "elapsed_calendar_days": 3,
+          "iv": 0.18,
+          "modeled_exit_bid": 71.96,
+          "net_per_quote_unit": -1.94
+        },
+        {
+          "scenario": "flat",
+          "futures": 2016,
+          "elapsed_calendar_days": 3,
+          "iv": 0.22,
+          "modeled_exit_bid": 86.06,
+          "net_per_quote_unit": 12.16
+        },
+        {
+          "scenario": "target_delayed",
+          "futures": 2100,
+          "elapsed_calendar_days": 8,
+          "iv": 0.14,
+          "modeled_exit_bid": 113.91,
+          "net_per_quote_unit": 40.01
+        },
+        {
+          "scenario": "target_delayed",
+          "futures": 2100,
+          "elapsed_calendar_days": 8,
+          "iv": 0.18,
+          "modeled_exit_bid": 124.7,
+          "net_per_quote_unit": 50.8
+        },
+        {
+          "scenario": "target_delayed",
+          "futures": 2100,
+          "elapsed_calendar_days": 8,
+          "iv": 0.22,
+          "modeled_exit_bid": 136.54,
+          "net_per_quote_unit": 62.64
+        }
+      ],
+      "wait_comparison": "在箱体边界确认后以同模型、同IV及IV升至22%分别重新估价；等待可降低假突破暴露，但须支付标的位移及潜在升波成本。横盘及反向成本见网格；三个交易日不启动则原时机假设失效。"
+    },
+    "D": {
+      "product": "SA",
+      "analysis_contract": "SA2701",
+      "actual_main_contract": "SA2701",
+      "as_of": "2026-09-21T11:00:00+08:00",
+      "quote_as_of": "2026-09-21T10:59:50+08:00",
+      "underlying_price": 1984,
+      "bars": "完成历史截至9月18日；9月21日仅最新价覆盖层，没有宣称当日收盘突破。当前仍在1980–2020箱体内。",
+      "structure": {
+        "box": [
+          1980,
+          2020
+        ],
+        "sessions": 9,
+        "range_percentile_60_windows": 8,
+        "atr20_fell_percent": 38,
+        "boundary_tests": 4,
+        "hv_percent": {
+          "5": 8,
+          "20": 15,
+          "60": 25,
+          "252": 27
+        },
+        "hv_method": "同月近期60日，252日同合约日收益逐日主力拼接，ddof=1，sqrt(252)；样本及换月表已校验。",
+        "path": "高点逐次降低至2000，反弹幅度递减，下沿四次测试"
+      },
+      "fundamentals": [
+        "9月19日公告的大装置复产今日实物流已到货，相当于区域周供应增加12%，此前公报未计入。",
+        "独立现货样本显示库存连续三周上升、今日成交价下调，下游采购暂缓。",
+        "反向事实：另一区域计划检修。核实停车最快15个自然日后，晚于本次3个交易日兑现窗口。"
+      ],
+      "member_flow": "同月三日价格、持仓及Top20方向变化与现货驱动一致；五家内资、三家外资逐席位原始数据已核验，仍保留套保动机未知的边界，会员行为不单独决定方向。",
+      "timing": {
+        "reassess_by": "2026-09-21T14:30:00+08:00",
+        "latest_realization_time": "2026-09-24T14:30:00+08:00",
+        "event": "新增现货供需冲击已启动，三个交易日内下一批交割流与库存数据将检验冲击是否持续。"
+      },
+      "invalidation": {
+        "execution": 2012,
+        "structure": 2020,
+        "target": 1900
+      },
+      "option": {
+        "contract": "SA2701P2000",
+        "expiry": "2026-12-05",
+        "remaining_calendar_days": 75,
+        "style": "American",
+        "pricing_model": "Black-76 European approximation; synthetic American lattice cross-check differs by <0.2 quote units",
+        "r": 0.02,
+        "bid": 72.7,
+        "ask": 72.9,
+        "ask_iv_percent": 18,
+        "book_as_of": "2026-09-21T10:59:50+08:00",
+        "bid_depth": [
+          100,
+          120,
+          150
+        ],
+        "ask_depth": [
+          100,
+          120,
+          150
+        ],
+        "volume": 2500,
+        "open_interest": 8000,
+        "multiplier": 20,
+        "tick": 0.1,
+        "public_fee_per_side_per_lot": 2,
+        "account_fee": "未读取；手续费总敏感性每手4至8元，滑点每手4元；网格按8元往返成本，另对12元核验结论不变。"
+      },
+      "relative_value": {
+        "history": "240个独立交易日、同品种60–90天期限与绝对Delta0.4–0.6归一比较；样本无前视，当前ask口径。",
+        "iv_percentile": 10,
+        "iv_median_percent": 25,
+        "same_month_nearby_strike_ask_iv_percent": [
+          18.5,
+          18,
+          18.4
+        ],
+        "next_tenor_comparable_ask_iv_percent": 20,
+        "chain_comparison": "±100邻档及下一期限均有完整盘口，深虚值方向敏感性较低，远月额外时间成本偏高。",
+        "scenario_iv_basis": "14/18/22覆盖降波、不变、部分事件重估，22来自可比期限及同类事件条件样本；没有强制回归一年HV。"
+      },
+      "cost_adjusted_scenarios": [
+        {
+          "scenario": "target_fast",
+          "futures": 1900,
+          "elapsed_calendar_days": 3,
+          "iv": 0.14,
+          "modeled_exit_bid": 113.39,
+          "net_per_quote_unit": 40.09
+        },
+        {
+          "scenario": "target_fast",
+          "futures": 1900,
+          "elapsed_calendar_days": 3,
+          "iv": 0.18,
+          "modeled_exit_bid": 123.95,
+          "net_per_quote_unit": 50.65
+        },
+        {
+          "scenario": "target_fast",
+          "futures": 1900,
+          "elapsed_calendar_days": 3,
+          "iv": 0.22,
+          "modeled_exit_bid": 135.57,
+          "net_per_quote_unit": 62.27
+        },
+        {
+          "scenario": "opposite",
+          "futures": 2020,
+          "elapsed_calendar_days": 3,
+          "iv": 0.14,
+          "modeled_exit_bid": 40.23,
+          "net_per_quote_unit": -33.07
+        },
+        {
+          "scenario": "opposite",
+          "futures": 2020,
+          "elapsed_calendar_days": 3,
+          "iv": 0.18,
+          "modeled_exit_bid": 54.27,
+          "net_per_quote_unit": -19.03
+        },
+        {
+          "scenario": "opposite",
+          "futures": 2020,
+          "elapsed_calendar_days": 3,
+          "iv": 0.22,
+          "modeled_exit_bid": 68.36,
+          "net_per_quote_unit": -4.94
+        },
+        {
+          "scenario": "flat",
+          "futures": 1984,
+          "elapsed_calendar_days": 3,
+          "iv": 0.14,
+          "modeled_exit_bid": 57.49,
+          "net_per_quote_unit": -15.81
+        },
+        {
+          "scenario": "flat",
+          "futures": 1984,
+          "elapsed_calendar_days": 3,
+          "iv": 0.18,
+          "modeled_exit_bid": 71.45,
+          "net_per_quote_unit": -1.85
+        },
+        {
+          "scenario": "flat",
+          "futures": 1984,
+          "elapsed_calendar_days": 3,
+          "iv": 0.22,
+          "modeled_exit_bid": 85.44,
+          "net_per_quote_unit": 12.14
+        },
+        {
+          "scenario": "target_delayed",
+          "futures": 1900,
+          "elapsed_calendar_days": 8,
+          "iv": 0.14,
+          "modeled_exit_bid": 112.22,
+          "net_per_quote_unit": 38.92
+        },
+        {
+          "scenario": "target_delayed",
+          "futures": 1900,
+          "elapsed_calendar_days": 8,
+          "iv": 0.18,
+          "modeled_exit_bid": 122.22,
+          "net_per_quote_unit": 48.92
+        },
+        {
+          "scenario": "target_delayed",
+          "futures": 1900,
+          "elapsed_calendar_days": 8,
+          "iv": 0.22,
+          "modeled_exit_bid": 133.29,
+          "net_per_quote_unit": 59.99
+        }
+      ],
+      "wait_comparison": "在箱体边界确认后以同模型、同IV及IV升至22%分别重新估价；等待可降低假突破暴露，但须支付标的位移及潜在升波成本。横盘及反向成本见网格；三个交易日不启动则原时机假设失效。"
+    }
+  },
+  "cases": [
+    {
+      "id": "update_ab",
+      "request": "更新，给我你认为值得做的机会，几个都行。",
+      "evidence_ids": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "id": "watch_ab",
+      "request": "这次先只给期货代理观察清单，缺真实期权数据也列出来，说明判断及缺口。",
+      "evidence_ids": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "id": "update_c",
+      "request": "更新，只按我的低隐波、压缩接近爆发和方向一起做的风格筛选。",
+      "evidence_ids": [
+        "C"
+      ]
+    },
+    {
+      "id": "update_d",
+      "request": "更新，只按我的低隐波、压缩接近爆发和方向一起做的风格筛选。",
+      "evidence_ids": [
+        "D"
+      ]
+    },
+    {
+      "id": "late_evidence",
+      "request": "根据这轮材料完成更新。",
+      "evidence_ids": [
+        "A",
+        "B"
+      ],
+      "research_log": "技术初筛时负责人写了PS put、SI put，并按此派发取证；随后收到了材料中的减产、去库与会员反向变化。",
+      "draft": "暂无直接买入建议，但重点看跌PS与SI，可关注虚值put，等补齐期权报价。",
+      "review": "价格与净仓差值计算正确，最终动作wait；已在末尾添加上涨风险提示。"
+    },
+    {
+      "id": "review_result",
+      "request": "昨天你提到的两个今天都暴涨，为什么？",
+      "evidence_ids": [
+        "A",
+        "B"
+      ],
+      "prior_report": "暂无买入建议，重点看跌PS与SI。",
+      "new_information": "用户只说两个都暴涨，尚未说明合约、期货或期权、时点与涨幅口径；没有用户成交或平仓记录。"
+    }
+  ]
+}

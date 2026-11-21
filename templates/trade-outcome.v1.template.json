@@ -1,0 +1,45 @@
+{
+  "schema_version": "trade_outcome.v1",
+  "trade_id": "REPLACE_WITH_REGISTERED_TRADE_ID",
+  "decision_id": "REPLACE_WITH_EXISTING_DECISION_ID",
+  "instrument": {
+    "product": "MA",
+    "analysis_contract": "MA2701",
+    "option_contract": "REPLACE_WITH_REAL_OPTION_CONTRACT",
+    "option_route": "long_call"
+  },
+  "strategy_context": {
+    "directional_view": "long",
+    "entry_style": "anticipatory_breakout",
+    "market_regime": "transition"
+  },
+  "execution": {
+    "entry_at": "REPLACE_WITH_ACTUAL_OFFSET_AWARE_TIMESTAMP",
+    "exit_at": "REPLACE_WITH_ACTUAL_OFFSET_AWARE_TIMESTAMP",
+    "quantity": "1",
+    "contract_multiplier": "10",
+    "entry_premium": "100",
+    "exit_premium": "120",
+    "gross_pnl_cny": "200",
+    "commission_cny": "5",
+    "slippage_cny": "2",
+    "slippage_accounting": "embedded_in_actual_fill_prices",
+    "other_costs_cny": "0",
+    "net_pnl_cny": "195"
+  },
+  "result_class": "win",
+  "attribution": {
+    "win_strength_tags": ["timely_entry"],
+    "loss_cause_tags": [],
+    "breakeven_tags": []
+  },
+  "evidence": [
+    {
+      "kind": "broker_execution_export",
+      "path": "REPLACE_WITH_REAL_ARTIFACT_PATH",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "captured_at": "REPLACE_WITH_OFFSET_AWARE_TIMESTAMP_AT_OR_AFTER_EXIT",
+      "supports": ["entry", "exit", "fees"]
+    }
+  ]
+}

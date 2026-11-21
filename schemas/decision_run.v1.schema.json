@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "decision_run.v1.schema.json",
+  "title": "Decision run v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "created_at",
+    "updated_at",
+    "task_mode",
+    "request",
+    "scope",
+    "phase",
+    "lifecycle_state",
+    "nodes",
+    "evidence_packets",
+    "underlying_thesis",
+    "option_expression",
+    "quality_review",
+    "permissions"
+  ],
+  "properties": {
+    "schema_version": {"const": "decision_run.v1"},
+    "run_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "task_mode": {
+      "enum": ["education", "universe_maintenance", "all_market_scan", "option_efficiency_scan", "single_analysis", "option_entry", "position_review", "trade_review"]
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "requested_contract", "option_analysis_requested"],
+      "properties": {
+        "product": {"type": ["string", "null"]},
+        "requested_contract": {"type": ["string", "null"]},
+        "option_analysis_requested": {"type": "boolean"}
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product_count", "universe_sha256", "product_specs_sha256", "report_policy_sha256", "orchestration_policy_sha256"],
+      "properties": {
+        "product_count": {"type": "integer", "minimum": 1},
+        "universe_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "product_specs_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "report_policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "orchestration_policy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "phase": {"enum": ["planned", "collecting_evidence", "ready_for_agent", "agent_decided", "quality_review", "finalized", "blocked"]},
+    "lifecycle_state": {"type": ["string", "null"]},
+    "nodes": {"type": "array", "items": {"type": "object"}},
+    "evidence_packets": {"type": "array", "items": {"type": "object"}},
+    "underlying_thesis": {"type": ["object", "null"]},
+    "option_expression": {"type": ["object", "null"]},
+    "quality_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["critic_revisions", "unresolved_material_issue"],
+      "properties": {
+        "critic_revisions": {"type": "integer", "minimum": 0, "maximum": 1},
+        "unresolved_material_issue": {"type": ["string", "null"]}
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order_placement_authorized", "short_option_open_allowed"],
+      "properties": {
+        "order_placement_authorized": {"const": false},
+        "short_option_open_allowed": {"const": false}
+      }
+    }
+  }
+}

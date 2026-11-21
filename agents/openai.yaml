@@ -1,0 +1,6 @@
+interface:
+  display_name: "中国期货与买方期权决策 Agent"
+  short_description: "中国商品期货走势与买方期权：复盘起爆点、筛选机会、复核已有仓位"
+  default_prompt: "使用 $cn-futures-decision-agent 分析这个品种，结合基本面、资金、消息和量价，说明当时能知道什么、还缺什么。"
+policy:
+  allow_implicit_invocation: true

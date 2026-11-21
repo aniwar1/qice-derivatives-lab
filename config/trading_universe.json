@@ -1,0 +1,161 @@
+{
+  "schema_version": "trading_universe.v1",
+  "effective_since": "2026-10-09",
+  "catalog_mode": "fixed_configured_scope_with_live_listing_evidence",
+  "product_count": 22,
+  "permission_basis": "user_reported",
+  "permission_scope": {
+    "instrument_types": [
+      "commodity_futures",
+      "commodity_futures_options"
+    ],
+    "allowed_exchanges": [
+      "CZCE",
+      "DCE",
+      "GFEX",
+      "SHFE"
+    ],
+    "allowed_products": [
+      {
+        "symbol": "AP",
+        "exchange": "CZCE",
+        "sina_node": "xpg_qh"
+      },
+      {
+        "symbol": "CF",
+        "exchange": "CZCE",
+        "sina_node": "mh_qh"
+      },
+      {
+        "symbol": "CJ",
+        "exchange": "CZCE",
+        "sina_node": "hz_qh"
+      },
+      {
+        "symbol": "CU",
+        "exchange": "SHFE",
+        "sina_node": "tong_qh"
+      },
+      {
+        "symbol": "FG",
+        "exchange": "CZCE",
+        "sina_node": "bl_qh"
+      },
+      {
+        "symbol": "JD",
+        "exchange": "DCE",
+        "sina_node": "jd_qh"
+      },
+      {
+        "symbol": "JM",
+        "exchange": "DCE",
+        "sina_node": "jm_qh"
+      },
+      {
+        "symbol": "LC",
+        "exchange": "GFEX",
+        "sina_node": "lc_qh"
+      },
+      {
+        "symbol": "LH",
+        "exchange": "DCE",
+        "sina_node": "lh_qh"
+      },
+      {
+        "symbol": "M",
+        "exchange": "DCE",
+        "sina_node": "dp_qh"
+      },
+      {
+        "symbol": "MA",
+        "exchange": "CZCE",
+        "sina_node": "zc_qh"
+      },
+      {
+        "symbol": "OI",
+        "exchange": "CZCE",
+        "sina_node": "czy_qh"
+      },
+      {
+        "symbol": "PK",
+        "exchange": "CZCE",
+        "sina_node": "pk_qh"
+      },
+      {
+        "symbol": "PS",
+        "exchange": "GFEX",
+        "sina_node": "ps_qh"
+      },
+      {
+        "symbol": "RU",
+        "exchange": "SHFE",
+        "sina_node": "xj_qh"
+      },
+      {
+        "symbol": "SA",
+        "exchange": "CZCE",
+        "sina_node": "cj_qh"
+      },
+      {
+        "symbol": "SI",
+        "exchange": "GFEX",
+        "sina_node": "si_qh"
+      },
+      {
+        "symbol": "SM",
+        "exchange": "CZCE",
+        "sina_node": "mg_qh"
+      },
+      {
+        "symbol": "SP",
+        "exchange": "SHFE",
+        "sina_node": "zj_qh"
+      },
+      {
+        "symbol": "SR",
+        "exchange": "CZCE",
+        "sina_node": "bst_qh"
+      },
+      {
+        "symbol": "UR",
+        "exchange": "CZCE",
+        "sina_node": "ns_qh"
+      },
+      {
+        "symbol": "V",
+        "exchange": "DCE",
+        "sina_node": "pvc_qh"
+      }
+    ]
+  },
+  "discovery_policy": {
+    "refresh_listing_and_contract_evidence_on_every_analysis": false,
+    "listing_catalog_preflight_implemented": false,
+    "authoritative_sources": [
+      "exchange_product_catalog",
+      "exchange_contract_list",
+      "broker_permission_and_quote_screen"
+    ],
+    "checked_in_symbol_list_is_authoritative_for_user_scope": true,
+    "static_name_and_group_metadata_is_authoritative": false,
+    "scan_attempts_all_configured_products_exactly_once": true,
+    "live_listing_status_is_evidence_not_scope_mutation": true,
+    "delisted_or_inactive_product_action": "retain_attempt_and_mark_unobservable",
+    "broker_permission_must_be_rechecked_before_first_trade": true,
+    "configured_allowed_products_define_user_scope": true,
+    "unlisted_config_product_action": "not_preclassified_attempt_once_then_mark_unobservable_on_provider_absence",
+    "new_product_requires_explicit_user_scope_update": true
+  },
+  "contract_policy": {
+    "futures_contract": "actual_tradeable_main_contract",
+    "main_contract_primary_key": "current_open_interest",
+    "main_contract_tiebreaker": "current_volume",
+    "continuous_contract_is_signal_only": true
+  },
+  "notes": [
+    "每次扫描逐项尝试当前配置的22品种；当前实现不声称在产品请求前完成独立上市目录预检，来源缺失时保留尝试并标记不可观测。",
+    "正向品种表记录用户选择的研究与交易范围；它不替代交易所上市或柜台权限核验。",
+    "静态中文名称和产业链分组仅用于展示；停牌、退市或来源不可用的配置品种仍保留一条尝试记录并标记不可观测。",
+    "新增品种须先由用户明确纳入允许范围。"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "schema_version": "trade_intent.v1",
+  "trade_id": "REPLACE_WITH_STABLE_TRADE_ID",
+  "decision_id": "REPLACE_WITH_EXISTING_DECISION_ID",
+  "instrument": {
+    "product": "MA",
+    "analysis_contract": "MA2701",
+    "option_contract": "REPLACE_WITH_REAL_OPTION_CONTRACT",
+    "option_route": "long_call"
+  },
+  "strategy_context": {
+    "directional_view": "long",
+    "entry_style": "anticipatory_breakout",
+    "market_regime": "transition"
+  },
+  "evidence": [
+    {
+      "kind": "decision_artifact",
+      "path": "REPLACE_WITH_REAL_ARTIFACT_PATH",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "captured_at": "REPLACE_WITH_OFFSET_AWARE_TIMESTAMP",
+      "supports": ["decision"]
+    }
+  ]
+}

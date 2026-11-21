@@ -1,0 +1,17 @@
+{
+  "schema_version": "daily_history_integrity.v1",
+  "universe_sha256": "fdee5a55e6cf9bbb716a79c1c013a198201c336d236c0ebd657125b107011fc1",
+  "anchor": {
+    "file": "local-data/market-history/daily/contract_daily_latest.sha256-f4821112ac341809ce3fd7128c149e4665fd230e310f1b57ca1d0c88833c5649.csv.gz",
+    "sha256": "f4821112ac341809ce3fd7128c149e4665fd230e310f1b57ca1d0c88833c5649",
+    "rows": 151100,
+    "coverage_sha256": "d0d8fd901b05ef53d05d462fcf2bf3461c61cde0a72c92ad2f4c97b03614d45e",
+    "date_range": {
+      "start": "2023-08-31",
+      "end": "2026-09-08"
+    }
+  },
+  "full_product_scope_start": "2024-12-26",
+  "history_before_full_scope": "immutable_anchor_only_no_listing_inference",
+  "publication_after_anchor": "every_published_date_must_cover_all_configured_products"
+}

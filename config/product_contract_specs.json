@@ -1,0 +1,195 @@
+{
+  "schema_version": "decision_agent_product_specs.v1",
+  "as_of": "2026-09-01",
+  "purpose": "策略研究通用的合约乘数、最小变动价位和保证金代理；每次实盘仍需核验实际合约规则",
+  "product_count": 22,
+  "universe_sha256": "fdee5a55e6cf9bbb716a79c1c013a198201c336d236c0ebd657125b107011fc1",
+  "source": {
+    "kind": "hicend_company_margin_rule_snapshot_metadata_projection",
+    "source_sha256": "d776b7f567a23225065ede3240e2dd03eb4a33e9d39d1c5b0686483a9118b155",
+    "historical_point_in_time_certified": false
+  },
+  "products": [
+    {
+      "symbol": "AP",
+      "name": "苹果",
+      "exchange": "CZCE",
+      "multiplier": 10,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.14
+    },
+    {
+      "symbol": "CF",
+      "name": "棉花",
+      "exchange": "CZCE",
+      "multiplier": 5,
+      "tick_size": 5.0,
+      "margin_rate_proxy": 0.12
+    },
+    {
+      "symbol": "CJ",
+      "name": "红枣",
+      "exchange": "CZCE",
+      "multiplier": 5,
+      "tick_size": 5.0,
+      "margin_rate_proxy": 0.13
+    },
+    {
+      "symbol": "CU",
+      "name": "铜",
+      "exchange": "SHFE",
+      "multiplier": 5,
+      "tick_size": 10.0,
+      "margin_rate_proxy": 0.14
+    },
+    {
+      "symbol": "FG",
+      "name": "玻璃",
+      "exchange": "CZCE",
+      "multiplier": 20,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.15
+    },
+    {
+      "symbol": "JD",
+      "name": "鸡蛋",
+      "exchange": "DCE",
+      "multiplier": 10,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.11
+    },
+    {
+      "symbol": "JM",
+      "name": "焦煤",
+      "exchange": "DCE",
+      "multiplier": 60,
+      "tick_size": 0.5,
+      "margin_rate_proxy": 0.17
+    },
+    {
+      "symbol": "LC",
+      "name": "碳酸锂",
+      "exchange": "GFEX",
+      "multiplier": 1,
+      "tick_size": 20.0,
+      "margin_rate_proxy": 0.25
+    },
+    {
+      "symbol": "LH",
+      "name": "生猪",
+      "exchange": "DCE",
+      "multiplier": 16,
+      "tick_size": 5.0,
+      "margin_rate_proxy": 0.13
+    },
+    {
+      "symbol": "M",
+      "name": "豆粕",
+      "exchange": "DCE",
+      "multiplier": 10,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.11
+    },
+    {
+      "symbol": "MA",
+      "name": "甲醇",
+      "exchange": "CZCE",
+      "multiplier": 10,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.12
+    },
+    {
+      "symbol": "OI",
+      "name": "菜籽油",
+      "exchange": "CZCE",
+      "multiplier": 10,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.12
+    },
+    {
+      "symbol": "PK",
+      "name": "花生",
+      "exchange": "CZCE",
+      "multiplier": 5,
+      "tick_size": 2.0,
+      "margin_rate_proxy": 0.11
+    },
+    {
+      "symbol": "PS",
+      "name": "多晶硅",
+      "exchange": "GFEX",
+      "multiplier": 3,
+      "tick_size": 5.0,
+      "margin_rate_proxy": 0.2
+    },
+    {
+      "symbol": "RU",
+      "name": "天然橡胶",
+      "exchange": "SHFE",
+      "multiplier": 10,
+      "tick_size": 5.0,
+      "margin_rate_proxy": 0.14
+    },
+    {
+      "symbol": "SA",
+      "name": "纯碱",
+      "exchange": "CZCE",
+      "multiplier": 20,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.15
+    },
+    {
+      "symbol": "SI",
+      "name": "工业硅",
+      "exchange": "GFEX",
+      "multiplier": 5,
+      "tick_size": 5.0,
+      "margin_rate_proxy": 0.16
+    },
+    {
+      "symbol": "SM",
+      "name": "锰硅",
+      "exchange": "CZCE",
+      "multiplier": 5,
+      "tick_size": 2.0,
+      "margin_rate_proxy": 0.15
+    },
+    {
+      "symbol": "SP",
+      "name": "纸浆",
+      "exchange": "SHFE",
+      "multiplier": 10,
+      "tick_size": 2.0,
+      "margin_rate_proxy": 0.11
+    },
+    {
+      "symbol": "SR",
+      "name": "白糖",
+      "exchange": "CZCE",
+      "multiplier": 10,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.1
+    },
+    {
+      "symbol": "UR",
+      "name": "尿素",
+      "exchange": "CZCE",
+      "multiplier": 20,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.14
+    },
+    {
+      "symbol": "V",
+      "name": "聚氯乙烯（PVC）",
+      "exchange": "DCE",
+      "multiplier": 5,
+      "tick_size": 1.0,
+      "margin_rate_proxy": 0.11
+    }
+  ],
+  "claim_boundary": {
+    "current_rule_metadata_proxy": true,
+    "historical_rule_changes_reconstructed": false,
+    "live_contract_rules_must_be_reverified": true
+  }
+}

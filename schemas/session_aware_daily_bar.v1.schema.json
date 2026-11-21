@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "session_aware_daily_bar.v1.schema.json",
+  "title": "Session-aware daily bar v1",
+  "description": "A completed daily bar or a post-night-close, pre-day-close partial daily-bar overlay with an explicit checkpoint, coverage, source and fresh official-exchange calendar evidence. Products without a night session cannot use the partial state. A partial bar is never a completed or confirmed breakout claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "product",
+    "analysis_contract",
+    "trade_date",
+    "bar_state",
+    "as_of",
+    "decision_semantics",
+    "ohlcv",
+    "coverage",
+    "source",
+    "calendar_evidence",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema_version": {"const": "session_aware_daily_bar.v1"},
+    "product": {"type": "string", "pattern": "^[A-Z]{1,3}$"},
+    "analysis_contract": {"type": "string", "pattern": "^[A-Z]{1,3}[0-9]{4}$"},
+    "trade_date": {"type": "string", "format": "date"},
+    "bar_state": {"enum": ["session_partial", "completed"]},
+    "as_of": {"type": "string", "format": "date-time"},
+    "decision_semantics": {"enum": ["anticipatory", "conditional", "confirmed_daily_breakout"]},
+    "ohlcv": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["open", "high", "low", "close", "volume", "open_interest"],
+      "properties": {
+        "open": {"type": "number", "exclusiveMinimum": 0},
+        "high": {"type": "number", "exclusiveMinimum": 0},
+        "low": {"type": "number", "exclusiveMinimum": 0},
+        "close": {"type": "number", "exclusiveMinimum": 0},
+        "volume": {"type": ["number", "null"], "minimum": 0},
+        "open_interest": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_kind",
+        "schedule_group",
+        "session_started_at",
+        "checkpoint_at",
+        "observed_through",
+        "expected_daily_close_at",
+        "covered_trading_seconds",
+        "required_checkpoint_seconds"
+      ],
+      "properties": {
+        "session_kind": {"enum": ["night", "day"]},
+        "schedule_group": {"enum": ["NONE", "23:00", "01:00", "02:30"]},
+        "session_started_at": {"type": "string", "format": "date-time"},
+        "checkpoint_at": {"type": "string", "format": "date-time"},
+        "observed_through": {"type": "string", "format": "date-time"},
+        "expected_daily_close_at": {"type": "string", "format": "date-time"},
+        "covered_trading_seconds": {"type": "integer", "minimum": 0},
+        "required_checkpoint_seconds": {"type": "integer", "minimum": 1}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "locator", "retrieved_at", "content_sha256"],
+      "properties": {
+        "kind": {"enum": ["url", "file"]},
+        "locator": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "retrieved_at": {"type": "string", "format": "date-time"},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "calendar_evidence": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/calendarEvidence"}
+      ]
+    },
+    "claim_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "completed_bar_claim_allowed",
+        "confirmed_daily_breakout_claim_eligible"
+      ],
+      "properties": {
+        "completed_bar_claim_allowed": {"type": "boolean"},
+        "confirmed_daily_breakout_claim_eligible": {"type": "boolean"}
+      }
+    }
+  },
+  "$defs": {
+    "calendarEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exchange",
+        "trade_date",
+        "regular_session_confirmed",
+        "url",
+        "retrieved_at",
+        "locator",
+        "content_sha256"
+      ],
+      "properties": {
+        "exchange": {"enum": ["SHFE", "INE", "DCE", "CZCE", "GFEX"]},
+        "trade_date": {"type": "string", "format": "date"},
+        "regular_session_confirmed": {"const": true},
+        "url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "retrieved_at": {"type": "string", "format": "date-time"},
+        "locator": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"exchange": {"const": "SHFE"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?shfe\\.com\\.cn(?:[/:?#]|$)"}}}
+        },
+        {
+          "if": {"properties": {"exchange": {"const": "INE"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?ine\\.cn(?:[/:?#]|$)"}}}
+        },
+        {
+          "if": {"properties": {"exchange": {"const": "DCE"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?dce\\.com\\.cn(?:[/:?#]|$)"}}}
+        },
+        {
+          "if": {"properties": {"exchange": {"const": "CZCE"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?czce\\.com\\.cn(?:[/:?#]|$)"}}}
+        },
+        {
+          "if": {"properties": {"exchange": {"const": "GFEX"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?gfex\\.com\\.cn(?:[/:?#]|$)"}}}
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"bar_state": {"const": "session_partial"}}, "required": ["bar_state"]},
+      "then": {
+        "properties": {
+          "decision_semantics": {"enum": ["anticipatory", "conditional"]},
+          "calendar_evidence": {"$ref": "#/$defs/calendarEvidence"},
+          "claim_boundary": {
+            "properties": {
+              "completed_bar_claim_allowed": {"const": false},
+              "confirmed_daily_breakout_claim_eligible": {"const": false}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"bar_state": {"const": "completed"}}, "required": ["bar_state"]},
+      "then": {
+        "properties": {
+          "calendar_evidence": {"type": "null"},
+          "claim_boundary": {
+            "properties": {
+              "completed_bar_claim_allowed": {"const": true},
+              "confirmed_daily_breakout_claim_eligible": {"const": true}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {"product": {"enum": ["AL", "AO", "AU", "CU", "NI", "PB", "RB", "RU", "SN", "SP", "ZN"]}},
+        "required": ["product"]
+      },
+      "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "SHFE"}}}}}
+    },
+    {
+      "if": {
+        "properties": {"product": {"enum": ["EC", "SC"]}},
+        "required": ["product"]
+      },
+      "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "INE"}}}}}
+    },
+    {
+      "if": {
+        "properties": {"product": {"enum": ["A", "C", "JD", "JM", "LH", "M", "V"]}},
+        "required": ["product"]
+      },
+      "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "DCE"}}}}}
+    },
+    {
+      "if": {
+        "properties": {"product": {"enum": ["AP", "CF", "CJ", "FG", "MA", "OI", "PK", "SA", "SM", "SR", "TA", "UR"]}},
+        "required": ["product"]
+      },
+      "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "CZCE"}}}}}
+    },
+    {
+      "if": {
+        "properties": {"product": {"enum": ["LC", "PS", "SI"]}},
+        "required": ["product"]
+      },
+      "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "GFEX"}}}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "coverage": {
+            "properties": {
+              "schedule_group": {"const": "NONE"}
+            }
+          }
+        },
+        "required": ["coverage"]
+      },
+      "then": {"properties": {"bar_state": {"const": "completed"}}}
+    }
+  ]
+}

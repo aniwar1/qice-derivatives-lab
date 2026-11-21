@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "trade_outcome.v1.schema.json",
+  "title": "Closed real option trade outcome",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "trade_id",
+    "decision_id",
+    "instrument",
+    "strategy_context",
+    "execution",
+    "result_class",
+    "attribution",
+    "evidence"
+  ],
+  "properties": {
+    "schema_version": {"const": "trade_outcome.v1"},
+    "trade_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "decision_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "instrument": {"$ref": "trade_intent.v1.schema.json#/$defs/instrument"},
+    "strategy_context": {"$ref": "trade_intent.v1.schema.json#/$defs/strategy_context"},
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entry_at",
+        "exit_at",
+        "quantity",
+        "contract_multiplier",
+        "entry_premium",
+        "exit_premium",
+        "gross_pnl_cny",
+        "commission_cny",
+        "slippage_cny",
+        "slippage_accounting",
+        "other_costs_cny",
+        "net_pnl_cny"
+      ],
+      "properties": {
+        "entry_at": {"type": "string", "format": "date-time"},
+        "exit_at": {"type": "string", "format": "date-time"},
+        "quantity": {"type": "string", "pattern": "^[1-9][0-9]*$"},
+        "contract_multiplier": {"type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "entry_premium": {"type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "exit_premium": {"type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "gross_pnl_cny": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "commission_cny": {"type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "slippage_cny": {"type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "slippage_accounting": {"const": "embedded_in_actual_fill_prices"},
+        "other_costs_cny": {"type": "string", "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"},
+        "net_pnl_cny": {"type": "string", "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$"}
+      }
+    },
+    "result_class": {"enum": ["win", "loss", "breakeven"]},
+    "attribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["win_strength_tags", "loss_cause_tags", "breakeven_tags"],
+      "properties": {
+        "win_strength_tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "timely_entry",
+              "anticipatory_entry_with_tight_invalidation",
+              "confirmed_breakout_follow_through",
+              "trend_alignment",
+              "catalyst_realized",
+              "favorable_iv",
+              "controlled_spread",
+              "sufficient_time_to_expiry",
+              "disciplined_exit"
+            ]
+          }
+        },
+        "loss_cause_tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "late_entry",
+              "false_breakout",
+              "underlying_thesis_wrong",
+              "trigger_not_confirmed",
+              "adverse_iv_change",
+              "theta_decay",
+              "poor_liquidity",
+              "wide_spread",
+              "exit_delay",
+              "execution_stop_not_followed",
+              "event_gap",
+              "insufficient_time_to_expiry"
+            ]
+          }
+        },
+        "breakeven_tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "edge_not_realized",
+              "costs_absorbed_edge",
+              "timely_scratch_exit",
+              "mixed_signal_resolution"
+            ]
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "trade_intent.v1.schema.json#/$defs/evidence"}
+    }
+  }
+}

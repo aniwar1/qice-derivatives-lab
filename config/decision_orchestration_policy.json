@@ -1,0 +1,176 @@
+{
+  "schema_version": "decision_orchestration_policy.v1",
+  "decision_owner": "agent",
+  "machine_may_select_direction": false,
+  "majority_vote_allowed": false,
+  "maximum_critic_revisions": 1,
+  "order_placement_authorized": false,
+  "short_option_open_allowed": false,
+  "task_modes": {
+    "education": {
+      "requires_product": false,
+      "required_evidence_domains": [],
+      "option_branch": "only_when_requested",
+      "learning_branch": false
+    },
+    "universe_maintenance": {
+      "requires_product": false,
+      "required_evidence_domains": [],
+      "option_branch": "disabled",
+      "learning_branch": false
+    },
+    "all_market_scan": {
+      "requires_product": false,
+      "required_evidence_domains": [
+        "market_contract",
+        "technical_structure"
+      ],
+      "focus_evidence_domains": [
+        "fundamentals_news",
+        "member_flow"
+      ],
+      "option_branch": "only_for_agent_shortlist_when_requested",
+      "learning_branch": false
+    },
+    "option_efficiency_scan": {
+      "requires_product": false,
+      "required_evidence_domains": [
+        "market_contract",
+        "technical_structure",
+        "fundamentals_news",
+        "member_flow"
+      ],
+      "focus_evidence_domains": [],
+      "option_branch": "proxy_only_until_real_option_chain_is_validated",
+      "learning_branch": false
+    },
+    "single_analysis": {
+      "requires_product": true,
+      "required_evidence_domains": [
+        "market_contract",
+        "technical_structure",
+        "fundamentals_news",
+        "member_flow"
+      ],
+      "option_branch": "only_when_requested",
+      "learning_branch": false
+    },
+    "option_entry": {
+      "requires_product": true,
+      "required_evidence_domains": [
+        "market_contract",
+        "technical_structure",
+        "fundamentals_news",
+        "member_flow",
+        "option_chain"
+      ],
+      "option_branch": "required",
+      "learning_branch": false
+    },
+    "position_review": {
+      "requires_product": true,
+      "required_evidence_domains": [
+        "market_contract",
+        "technical_structure",
+        "fundamentals_news",
+        "member_flow",
+        "option_chain",
+        "account_position"
+      ],
+      "option_branch": "required",
+      "learning_branch": false
+    },
+    "trade_review": {
+      "requires_product": false,
+      "required_evidence_domains": [
+        "realized_trade"
+      ],
+      "option_branch": "disabled",
+      "learning_branch": true
+    }
+  },
+  "evidence_domains": [
+    "market_contract",
+    "technical_structure",
+    "fundamentals_news",
+    "member_flow",
+    "option_chain",
+    "account_position",
+    "realized_trade"
+  ],
+  "evidence_status_axes": {
+    "availability": [
+      "complete",
+      "partial",
+      "unobservable"
+    ],
+    "freshness": [
+      "fresh",
+      "stale",
+      "not_applicable"
+    ],
+    "integrity": [
+      "verified",
+      "degraded",
+      "unverified"
+    ],
+    "identity": [
+      "verified",
+      "degraded",
+      "unverified"
+    ],
+    "executability": [
+      "executable",
+      "incomplete",
+      "unobservable",
+      "not_applicable"
+    ]
+  },
+  "lifecycle_states": [
+    "screened",
+    "shortlisted",
+    "evidence_ready",
+    "degraded",
+    "armed",
+    "wait",
+    "entered",
+    "target_hit",
+    "option_execution_stop",
+    "time_expired",
+    "thesis_changed",
+    "closed",
+    "reviewed"
+  ],
+  "lifecycle_transitions": {
+    "unstarted": ["screened"],
+    "screened": ["shortlisted", "wait"],
+    "shortlisted": ["evidence_ready", "degraded", "wait"],
+    "evidence_ready": ["armed", "wait", "thesis_changed"],
+    "degraded": ["armed", "wait", "thesis_changed"],
+    "armed": ["entered", "wait", "time_expired", "thesis_changed"],
+    "wait": ["screened", "shortlisted", "evidence_ready", "reviewed"],
+    "entered": ["target_hit", "option_execution_stop", "time_expired", "thesis_changed"],
+    "target_hit": ["closed"],
+    "option_execution_stop": ["closed"],
+    "time_expired": ["closed"],
+    "thesis_changed": ["closed", "reviewed"],
+    "closed": ["reviewed"],
+    "reviewed": []
+  },
+  "hard_execution_blocks": [
+    "product_outside_universe",
+    "analysis_contract_identity_unverified",
+    "option_underlying_month_mismatch",
+    "future_dated_evidence",
+    "executable_quote_missing_or_crossed",
+    "option_expiry_before_realization_window"
+  ],
+  "claim_boundary": {
+    "validation_is_not_trade_permission": true,
+    "evidence_gaps_do_not_vote": true,
+    "noncritical_gaps_are_agent_uncertainty_inputs": true,
+    "critic_does_not_choose_action": true,
+    "learning_does_not_auto_modify_skill": true,
+    "hidden_reasoning_is_never_persisted": true
+  }
+}

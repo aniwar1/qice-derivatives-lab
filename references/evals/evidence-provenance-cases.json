@@ -1,0 +1,74 @@
+{
+  "exercise": "独立合成行为测试，非真实行情、非持仓盈亏样本。只读本地Skill与本文件，不联网、不写账本或修改Skill；按各案用户请求简短回答并说明证据边界，不要求生成正式报告schema。",
+  "cases": [
+    {
+      "id": "E1",
+      "user_request": "网页显示今天上涨，榜单也看多，是不是新多资金进来了？",
+      "as_of": "2026-10-29T16:15:00+08:00",
+      "contract": "JD2612",
+      "facts": {
+        "page_header": "2026-10-29最新行情",
+        "quote": {"date": "2026-10-29", "price": 3380, "oi_change": -12000},
+        "rank_content_date": "2026-10-28",
+        "rank_rows": {"long_change": -1000, "short_change": -6000},
+        "latest_three_sessions": ["2026-10-27", "2026-10-28", "2026-10-29"],
+        "rank_29_fetch_result": "空表；官方与备用来源均未取得可用榜单",
+        "rank_26": "可得但不属于最近三日窗口",
+        "foreign_members": "乾坤、摩根大通、瑞银未在已得Top20榜上出现"
+      }
+    },
+    {
+      "id": "E2",
+      "user_request": "这些库存数字能说明今天已经明显累库了吗？",
+      "as_of": "2026-10-29T16:15:00+08:00",
+      "facts": {
+        "provider_A_original": [
+          {"date": "2026-10-27", "production_days": 0.91, "circulation_days": 1.06},
+          {"date": "2026-10-28", "production_days": 0.91, "circulation_days": 1.07}
+        ],
+        "provider_B_original": [
+          {"date": "2026-10-28", "production_days": 0.94, "circulation_days": 1.02},
+          {"date": "2026-10-29", "production_days": 0.96, "circulation_days": 1.07}
+        ],
+        "today_secondary_article": {"published": "2026-10-29", "production_days": 1.42, "circulation_days": 1.80},
+        "secondary_values_original_date": "2026-10-14",
+        "source_identity": "A/B为不同机构样本；以上原文和日期均为本练习给定已核验事实"
+      }
+    },
+    {
+      "id": "E3",
+      "user_request": "日线报错、期权接口涨跌也对不上，刚才的分析是不是全部不能用了？",
+      "as_of": "2026-10-29T16:15:00+08:00",
+      "facts": {
+        "daily": "同一实际合约的完成历史有效至10/28；10/29正式日线未返回",
+        "quote": "同一实际合约10/29收盘后报价可得，时间和合约已绑定；不是交易所完整日K",
+        "option": "同月合约、截图及链上bid28/ask28.5一致；接口衍生涨跌-49%与截图日跌-33%基准未知",
+        "iv": "截图显示29.8%，取价模型口径未知；没有Greeks和历史IV",
+        "position_metadata": "用户仅确认成本与数量；实际开仓时间、真实手续费未知，正式schema要求非空时间与数值费用",
+        "model": "以当前bid校准的Black76欧式近似可复算，r=0、ACT365，假设未来IV为25/30/35%，忽略提前行权、费用和价差",
+        "market_evidence": "基本面、会员和消息在本案未提供，不足以单独作hold/close判断"
+      }
+    },
+    {
+      "id": "E4",
+      "user_request": "把本次数据日期和口径问题精进到Skill，要求自进化；我还没平仓。",
+      "facts": {
+        "maintenance_authorization": "用户已授权维护Skill及同步源码推送远端，保护其他已有修改",
+        "confirmed_issue": "原回答将网页顶部日期当会员榜日期，另把不同机构库存拼接成趋势",
+        "position_outcome": "未平仓，只有用户成本与浮亏截图；没有完整真实成交记录",
+        "evaluation_scope": "本次只描述应执行的维护及验证计划，不实际改Skill或账本；不得宣称已修改或已推送"
+      }
+    },
+    {
+      "id": "E5",
+      "user_request": "我的期权11月17日到期，标的是12月期货，所以12月供应减少的预期是不是完全不用看？",
+      "facts": {
+        "instrument": "已持有11月17日到期、标的JD2612的看跌期权",
+        "physical_event_window": "12月供应可能减少",
+        "forecast_first_publication": "10月16日，属于公开预测，未确认实物结果",
+        "repricing_evidence": "尚未取得预期变化、市场计价程度或新增催化的证据",
+        "evaluation_scope": "只解释期限与预期的关系，不给持有或平仓动作，不编概率"
+      }
+    }
+  ]
+}

@@ -1,0 +1,140 @@
+{
+  "schema_version": "decision_agent_product_groups.v1",
+  "universe_sha256": "fdee5a55e6cf9bbb716a79c1c013a198201c336d236c0ebd657125b107011fc1",
+  "purpose": "候选多样性与相关暴露检查；分组只帮助 Agent 识别重复风险，不打分、不投票、不自动排除",
+  "primary_groups": [
+    {
+      "id": "ferrous_and_building",
+      "name": "黑色与建材",
+      "products": [
+        "FG",
+        "JM",
+        "SA",
+        "SM"
+      ]
+    },
+    {
+      "id": "base_metals_and_new_materials",
+      "name": "有色与新能源材料",
+      "products": [
+        "CU",
+        "LC",
+        "PS",
+        "SI"
+      ]
+    },
+    {
+      "id": "energy_and_chemicals",
+      "name": "能源化工",
+      "products": [
+        "MA",
+        "RU",
+        "V"
+      ]
+    },
+    {
+      "id": "grains_oils_and_feed",
+      "name": "谷物油脂与饲料",
+      "products": [
+        "M",
+        "OI",
+        "PK"
+      ]
+    },
+    {
+      "id": "softs_and_forest",
+      "name": "软商品与林产品",
+      "products": [
+        "CF",
+        "SP",
+        "SR"
+      ]
+    },
+    {
+      "id": "fresh_and_livestock",
+      "name": "生鲜与养殖",
+      "products": [
+        "AP",
+        "CJ",
+        "JD",
+        "LH"
+      ]
+    },
+    {
+      "id": "fertilizer",
+      "name": "化肥",
+      "products": [
+        "UR"
+      ]
+    }
+  ],
+  "correlated_exposure_clusters": [
+    {
+      "id": "glass_alkali_chain",
+      "name": "玻璃与纯碱",
+      "products": [
+        "FG",
+        "SA"
+      ],
+      "selection_policy": "compare_shared_and_independent_drivers"
+    },
+    {
+      "id": "steel_materials_chain",
+      "name": "钢材与炉料",
+      "products": [
+        "JM",
+        "SM"
+      ],
+      "selection_policy": "avoid_duplicate_directional_exposure_without_incremental_edge"
+    },
+    {
+      "id": "chemical_products",
+      "name": "化工品",
+      "products": [
+        "MA",
+        "RU",
+        "V"
+      ],
+      "selection_policy": "compare_shared_cost_drivers_and_product_specific_supply_demand"
+    },
+    {
+      "id": "feed_and_oils_chain",
+      "name": "谷物油脂饲料",
+      "products": [
+        "M",
+        "OI",
+        "PK"
+      ],
+      "selection_policy": "compare_substitution_weather_and_crush_transmission"
+    },
+    {
+      "id": "silicon_chain",
+      "name": "硅材料",
+      "products": [
+        "PS",
+        "SI"
+      ],
+      "selection_policy": "compare_industrial_and_photovoltaic_demand_windows"
+    },
+    {
+      "id": "livestock_proteins",
+      "name": "养殖蛋白",
+      "products": [
+        "JD",
+        "LH"
+      ],
+      "selection_policy": "both_allowed_because_cycles_and_storage_constraints_differ"
+    }
+  ],
+  "agent_comparison_dimensions": [
+    "hypothesis_path_diversity",
+    "time_path_diversity",
+    "product_cluster_exposure",
+    "evidence_source_independence"
+  ],
+  "claim_boundary": {
+    "group_is_not_correlation_estimate": true,
+    "group_is_not_direction_signal": true,
+    "group_does_not_auto_select_or_remove_product": true
+  }
+}

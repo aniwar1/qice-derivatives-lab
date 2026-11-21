@@ -1,0 +1,443 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.codex/schemas/codex_strategy_decision.agent.schema.json",
+  "title": "Public strategy decision projection produced by Codex",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "as_of",
+    "decision",
+    "product",
+    "product_name",
+    "actual_main_contract",
+    "analysis_contract",
+    "direction",
+    "entry_style",
+    "entry_timing",
+    "scan_coverage",
+    "session_daily_bar",
+    "market_levels",
+    "rationale",
+    "technical_structure",
+    "fundamentals_news",
+    "member_flow",
+    "option_market",
+    "option_expression",
+    "risks",
+    "evidence_gaps",
+    "quality_review",
+    "reassess_by",
+    "order_placement_authorized",
+    "short_option_open_allowed"
+  ],
+  "properties": {
+    "schema_version": {"const": "codex_strategy_decision.v1"},
+    "as_of": {"$ref": "#/$defs/timestamp"},
+    "decision": {"enum": ["futures", "long_call", "long_put", "wait"]},
+    "product": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/product"}]},
+    "product_name": {"type": ["string", "null"], "minLength": 1, "maxLength": 80},
+    "actual_main_contract": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/contract"}]},
+    "analysis_contract": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/contract"}]},
+    "direction": {"enum": ["long", "short", "neutral", "uncertain"]},
+    "entry_style": {
+      "enum": [
+        "anticipatory_breakout",
+        "confirmed_breakout",
+        "trend_pullback",
+        "structure_reversal",
+        "event_preposition",
+        "post_event_continuation",
+        "none"
+      ]
+    },
+    "entry_timing": {"enum": ["now", "conditional", "wait"]},
+    "scan_coverage": {"$ref": "#/$defs/scanCoverage"},
+    "session_daily_bar": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/sessionDailyBar"}]
+    },
+    "market_levels": {"$ref": "#/$defs/marketLevels"},
+    "rationale": {"$ref": "#/$defs/rationale"},
+    "technical_structure": {"$ref": "#/$defs/domain"},
+    "fundamentals_news": {"$ref": "#/$defs/domain"},
+    "member_flow": {"$ref": "#/$defs/domain"},
+    "option_market": {"$ref": "#/$defs/domain"},
+    "option_expression": {
+      "oneOf": [{"type": "null"}, {"$ref": "#/$defs/optionExpression"}]
+    },
+    "risks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": {"$ref": "#/$defs/text"}
+    },
+    "evidence_gaps": {
+      "type": "array",
+      "maxItems": 20,
+      "items": {"$ref": "#/$defs/text"}
+    },
+    "quality_review": {"$ref": "#/$defs/qualityReview"},
+    "reassess_by": {"$ref": "#/$defs/timestamp"},
+    "order_placement_authorized": {"const": false},
+    "short_option_open_allowed": {"const": false}
+  },
+  "$defs": {
+    "timestamp": {"type": "string", "format": "date-time", "minLength": 20},
+    "text": {"type": "string", "minLength": 1, "maxLength": 1600},
+    "product": {"type": "string", "pattern": "^[A-Z]{1,3}$"},
+    "contract": {"type": "string", "pattern": "^[A-Z]{1,3}[0-9]{4}$"},
+    "scanProductObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "product",
+        "status",
+        "actual_main_contract",
+        "observed_at",
+        "known_gap"
+      ],
+      "properties": {
+        "product": {"$ref": "#/$defs/product"},
+        "status": {"enum": ["complete", "partial", "unobservable"]},
+        "actual_main_contract": {
+          "oneOf": [{"type": "null"}, {"$ref": "#/$defs/contract"}]
+        },
+        "observed_at": {"type": ["string", "null"], "format": "date-time"},
+        "known_gap": {"type": ["string", "null"], "minLength": 1, "maxLength": 500}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"enum": ["complete", "partial"]}}},
+          "then": {
+            "properties": {
+              "actual_main_contract": {"$ref": "#/$defs/contract"},
+              "observed_at": {"$ref": "#/$defs/timestamp"}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"status": {"const": "unobservable"}}},
+          "then": {
+            "properties": {
+              "known_gap": {"type": "string", "minLength": 1, "maxLength": 500}
+            }
+          }
+        }
+      ]
+    },
+    "scanCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "expected_count", "attempted_count", "products"],
+      "properties": {
+        "scope": {"enum": ["all_market", "single_product"]},
+        "expected_count": {"type": "integer", "minimum": 1, "maximum": 100},
+        "attempted_count": {"type": "integer", "minimum": 1, "maximum": 100},
+        "products": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {"$ref": "#/$defs/scanProductObservation"}
+        }
+      }
+    },
+    "positiveNumberOrNull": {
+      "oneOf": [{"type": "null"}, {"type": "number", "exclusiveMinimum": 0}]
+    },
+    "nonNegativeNumberOrNull": {
+      "oneOf": [{"type": "null"}, {"type": "number", "minimum": 0}]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "title", "retrieved_at", "locator", "content_sha256"],
+      "properties": {
+        "url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 240},
+        "retrieved_at": {"$ref": "#/$defs/timestamp"},
+        "locator": {"type": "string", "minLength": 1, "maxLength": 500},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "domain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "freshness", "conclusion", "sources"],
+      "properties": {
+        "status": {"enum": ["complete", "partial", "unobservable"]},
+        "freshness": {"enum": ["fresh", "stale", "not_applicable"]},
+        "conclusion": {"type": "string", "minLength": 1, "maxLength": 1200},
+        "sources": {
+          "type": "array",
+          "maxItems": 12,
+          "items": {"$ref": "#/$defs/source"}
+        }
+      }
+    },
+    "calendarEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exchange",
+        "trade_date",
+        "regular_session_confirmed",
+        "url",
+        "retrieved_at",
+        "locator",
+        "content_sha256"
+      ],
+      "properties": {
+        "exchange": {"enum": ["SHFE", "INE", "DCE", "CZCE", "GFEX"]},
+        "trade_date": {"type": "string", "format": "date"},
+        "regular_session_confirmed": {"const": true},
+        "url": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "retrieved_at": {"$ref": "#/$defs/timestamp"},
+        "locator": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"exchange": {"const": "SHFE"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?shfe\\.com\\.cn(?:[/:?#]|$)"}}}
+        },
+        {
+          "if": {"properties": {"exchange": {"const": "INE"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?ine\\.cn(?:[/:?#]|$)"}}}
+        },
+        {
+          "if": {"properties": {"exchange": {"const": "DCE"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?dce\\.com\\.cn(?:[/:?#]|$)"}}}
+        },
+        {
+          "if": {"properties": {"exchange": {"const": "CZCE"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?czce\\.com\\.cn(?:[/:?#]|$)"}}}
+        },
+        {
+          "if": {"properties": {"exchange": {"const": "GFEX"}}, "required": ["exchange"]},
+          "then": {"properties": {"url": {"pattern": "^https://(?:[^/?#@]+\\.)?gfex\\.com\\.cn(?:[/:?#]|$)"}}}
+        }
+      ]
+    },
+    "sessionDailyBar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "product",
+        "analysis_contract",
+        "trade_date",
+        "bar_state",
+        "as_of",
+        "decision_semantics",
+        "ohlcv",
+        "coverage",
+        "source",
+        "calendar_evidence",
+        "claim_boundary"
+      ],
+      "properties": {
+        "schema_version": {"const": "session_aware_daily_bar.v1"},
+        "product": {"$ref": "#/$defs/product"},
+        "analysis_contract": {"$ref": "#/$defs/contract"},
+        "trade_date": {"type": "string", "format": "date"},
+        "bar_state": {"enum": ["session_partial", "completed"]},
+        "as_of": {"$ref": "#/$defs/timestamp"},
+        "decision_semantics": {"enum": ["anticipatory", "conditional", "confirmed_daily_breakout"]},
+        "ohlcv": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["open", "high", "low", "close", "volume", "open_interest"],
+          "properties": {
+            "open": {"type": "number", "exclusiveMinimum": 0},
+            "high": {"type": "number", "exclusiveMinimum": 0},
+            "low": {"type": "number", "exclusiveMinimum": 0},
+            "close": {"type": "number", "exclusiveMinimum": 0},
+            "volume": {"$ref": "#/$defs/nonNegativeNumberOrNull"},
+            "open_interest": {"$ref": "#/$defs/nonNegativeNumberOrNull"}
+          }
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "session_kind",
+            "schedule_group",
+            "session_started_at",
+            "checkpoint_at",
+            "observed_through",
+            "expected_daily_close_at",
+            "covered_trading_seconds",
+            "required_checkpoint_seconds"
+          ],
+          "properties": {
+            "session_kind": {"enum": ["night", "day"]},
+            "schedule_group": {"enum": ["NONE", "23:00", "01:00", "02:30"]},
+            "session_started_at": {"$ref": "#/$defs/timestamp"},
+            "checkpoint_at": {"$ref": "#/$defs/timestamp"},
+            "observed_through": {"$ref": "#/$defs/timestamp"},
+            "expected_daily_close_at": {"$ref": "#/$defs/timestamp"},
+            "covered_trading_seconds": {"type": "integer", "minimum": 0},
+            "required_checkpoint_seconds": {"type": "integer", "minimum": 1}
+          }
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "locator", "retrieved_at", "content_sha256"],
+          "properties": {
+            "kind": {"enum": ["url", "file"]},
+            "locator": {"type": "string", "minLength": 1, "maxLength": 2048},
+            "retrieved_at": {"$ref": "#/$defs/timestamp"},
+            "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+          }
+        },
+        "calendar_evidence": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/calendarEvidence"}
+          ]
+        },
+        "claim_boundary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["completed_bar_claim_allowed", "confirmed_daily_breakout_claim_eligible"],
+          "properties": {
+            "completed_bar_claim_allowed": {"type": "boolean"},
+            "confirmed_daily_breakout_claim_eligible": {"type": "boolean"}
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"bar_state": {"const": "session_partial"}}, "required": ["bar_state"]},
+          "then": {
+            "properties": {
+              "decision_semantics": {"enum": ["anticipatory", "conditional"]},
+              "calendar_evidence": {"$ref": "#/$defs/calendarEvidence"},
+              "claim_boundary": {
+                "properties": {
+                  "completed_bar_claim_allowed": {"const": false},
+                  "confirmed_daily_breakout_claim_eligible": {"const": false}
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"bar_state": {"const": "completed"}}, "required": ["bar_state"]},
+          "then": {
+            "properties": {
+              "calendar_evidence": {"type": "null"},
+              "claim_boundary": {
+                "properties": {
+                  "completed_bar_claim_allowed": {"const": true},
+                  "confirmed_daily_breakout_claim_eligible": {"const": true}
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {"properties": {"product": {"enum": ["CU", "RU", "SP"]}}, "required": ["product"]},
+          "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "SHFE"}}}}}
+        },
+        {
+          "if": {"properties": {"product": {"enum": ["JD", "JM", "LH", "M", "V"]}}, "required": ["product"]},
+          "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "DCE"}}}}}
+        },
+        {
+          "if": {"properties": {"product": {"enum": ["AP", "CF", "CJ", "FG", "MA", "OI", "PK", "SA", "SM", "SR", "UR"]}}, "required": ["product"]},
+          "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "CZCE"}}}}}
+        },
+        {
+          "if": {"properties": {"product": {"enum": ["LC", "PS", "SI"]}}, "required": ["product"]},
+          "then": {"properties": {"calendar_evidence": {"properties": {"exchange": {"const": "GFEX"}}}}}
+        }
+      ]
+    },
+    "marketLevels": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "current_price",
+        "quote_at",
+        "strongest_support",
+        "strongest_resistance",
+        "trigger",
+        "invalidation",
+        "target",
+        "tick_size"
+      ],
+      "properties": {
+        "current_price": {"$ref": "#/$defs/positiveNumberOrNull"},
+        "quote_at": {"type": ["string", "null"], "format": "date-time"},
+        "strongest_support": {"$ref": "#/$defs/positiveNumberOrNull"},
+        "strongest_resistance": {"$ref": "#/$defs/positiveNumberOrNull"},
+        "trigger": {"$ref": "#/$defs/positiveNumberOrNull"},
+        "invalidation": {"$ref": "#/$defs/positiveNumberOrNull"},
+        "target": {"$ref": "#/$defs/positiveNumberOrNull"},
+        "tick_size": {"$ref": "#/$defs/positiveNumberOrNull"}
+      }
+    },
+    "rationale": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["thesis", "why_now", "why_not_wait", "why_not_opposite", "strongest_counterevidence"],
+      "properties": {
+        "thesis": {"$ref": "#/$defs/text"},
+        "why_now": {"$ref": "#/$defs/text"},
+        "why_not_wait": {"$ref": "#/$defs/text"},
+        "why_not_opposite": {"$ref": "#/$defs/text"},
+        "strongest_counterevidence": {"$ref": "#/$defs/text"}
+      }
+    },
+    "qualityReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "critic_revisions",
+        "strongest_challenge",
+        "resolution",
+        "unresolved_material_issue"
+      ],
+      "properties": {
+        "critic_revisions": {"const": 1},
+        "strongest_challenge": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "resolution": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "unresolved_material_issue": {"type": "null"}
+      }
+    },
+    "optionExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "route",
+        "symbol",
+        "underlying_contract",
+        "expiration_date",
+        "strike",
+        "bid",
+        "ask",
+        "quote_at",
+        "implied_volatility",
+        "delta",
+        "theta",
+        "max_premium_loss"
+      ],
+      "properties": {
+        "route": {"enum": ["long_call", "long_put"]},
+        "symbol": {"type": "string", "minLength": 1, "maxLength": 80},
+        "underlying_contract": {"$ref": "#/$defs/contract"},
+        "expiration_date": {"type": "string", "format": "date"},
+        "strike": {"type": "number", "exclusiveMinimum": 0},
+        "bid": {"$ref": "#/$defs/nonNegativeNumberOrNull"},
+        "ask": {"$ref": "#/$defs/nonNegativeNumberOrNull"},
+        "quote_at": {"$ref": "#/$defs/timestamp"},
+        "implied_volatility": {"$ref": "#/$defs/positiveNumberOrNull"},
+        "delta": {"oneOf": [{"type": "null"}, {"type": "number", "minimum": -1, "maximum": 1}]},
+        "theta": {"type": ["number", "null"]},
+        "max_premium_loss": {"$ref": "#/$defs/positiveNumberOrNull"}
+      }
+    }
+  }
+}
