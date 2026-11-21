@@ -1,4 +1,4 @@
-import type { Study, FrozenContext } from "../types";
+import type { Study, FrozenContext, FrequencyResult, FrequencySession, ResearchMode } from "../types";
 import type {
   RunEvent,
   ResearchDetail,
@@ -124,3 +124,9 @@ export const getAgentStudy = async (signal?: AbortSignal): Promise<Study> =>
 
 export const getFrozenContext = async (day: string, signal?: AbortSignal): Promise<FrozenContext> =>
   readJson(await fetch(endpoint(`/api/workbench/agent-replay/context/${encodeURIComponent(day)}`), { signal }));
+
+export const getFrequencyStudy = async (signal?: AbortSignal): Promise<FrequencyResult> =>
+  readJson(await fetch(endpoint("/api/workbench/frequency-study"), { signal }));
+
+export const getFrequencySession = async (variant: ResearchMode, group: string, day: string, signal?: AbortSignal): Promise<FrequencySession> =>
+  readJson(await fetch(endpoint(`/api/workbench/frequency-study/sessions/${variant}/${group}/${encodeURIComponent(day)}`), { signal }));

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FrequencyStudy } from "./components/FrequencyStudy";
 import { AgentStudy } from "./components/AgentStudy";
 import { AsyncState } from "./components/AsyncState";
 import { DecisionRail } from "./components/DecisionRail";
@@ -11,9 +12,10 @@ import { directionLabel, formatTimestamp, humanStatus, normalizeDashboard } from
 import type { DashboardView, RunEvent, StrategyPlan, StrategyRunAccepted, WorkbenchBacktest } from "./types";
 
 type LoadState = "loading" | "ready" | "error";
-type Route = { page: "agent" | "overview" | "plans" | "products" | "archive"; id?: string; day?: string };
+type Route = { page: "frequency" | "agent" | "overview" | "plans" | "products" | "archive"; id?: string; day?: string };
 
 const pages = [
+  { page: "frequency", label: "频率与期限对照" },
   { page: "agent", label: "Agent 策略回测" },
   { page: "overview", label: "十月回测基线" },
   { page: "plans", label: "十月基线计划" },
@@ -27,7 +29,7 @@ function readRoute(): Route {
   if (page === "products" || page === "archive") {
     return { page, id: /^[A-Za-z0-9_-]+$/.test(id ?? "") ? id : undefined };
   }
-  return { page: page === "overview" ? "overview" : "agent" };
+  return { page: page === "overview" || page === "agent" ? page : "frequency" };
 }
 
 function App() {
@@ -258,6 +260,7 @@ function App() {
           {error && <div className="alert workspace-alert" role="alert"><span>{error}</span><button className="text-action" onClick={() => void load()}>重新连接</button></div>}
           {dashboard?.codexState === "authentication_required" && <p className="alert">启动研究前，请在终端运行 <code>codex login</code>，然后重新加载页面。</p>}
           {runMessage && <div className="workspace-run" role="status"><span>{runMessage}</span>{finishedRunId ? <button className="text-action" onClick={() => openArchive(finishedRunId)}>查看本次研究 →</button> : <HelpTip label="解释研究进度">实时连接中断时，工作台会继续查询本地服务中的任务状态。</HelpTip>}</div>}
+          {route.page === "frequency" && <FrequencyStudy />}
           {route.page === "agent" && <AgentStudy namesByProduct={Object.fromEntries(products.map(p => [p.symbol, p.name]))} />}
           {route.page === "overview" && <StrategyOverview data={backtest} error={backtestError} openPlan={openPlan} />}
           {route.page === "plans" && <>

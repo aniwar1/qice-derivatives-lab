@@ -13,14 +13,16 @@ from .config import Settings
 from .dashboard import DashboardProjector, DomainSnapshotProvider, public_run_view
 from .db import StrategyStore
 from .freshness import LatestStrategyResolution, resolve_latest_strategy
-from .live_options import collect_option_books
+from .experiment_view import live_research_policy
+from .live_paper import paper_account, directional_precheck
+from .live_options import collect_option_books, holding_sessions, event_pairs
 from .live_review import validate_agent_review, bind_public_domains
 from .member_positions import collect_member_positions
 from .agent_sources import collect_agent_sources
 from .models import AgentStrategyPayload, LatestStrategyRecord, StrategyRunAccepted, StrategyRunRequest
 from .prompting import build_strategy_prompt
 from .opportunities import compare_opportunities, compile_opportunities
-from .research_archive import ResearchArchive, ResearchCapture, capture_market
+from .research_archive import ResearchArchive, ResearchCapture, capture_market, read_run_artifact
 
 
 BJT = ZoneInfo("Asia/Shanghai")
@@ -161,12 +163,17 @@ class StrategyService:
                     specs = {item["symbol"]: item["multiplier"] for item in json.load(stream)["products"]}
             decision_clock = datetime.now(tz=BJT)
             context = {
-                "version": "agent_review.v2", "cutoff": decision_clock.isoformat(),
+                "version": "agent_review.v3", "cutoff": decision_clock.isoformat(),
+                "paper_account": paper_account(self.settings.workspace_root, decision_clock),
+                "research_policy": await asyncio.to_thread(live_research_policy, self.settings.workspace_root),
+                "holding_sessions": await asyncio.to_thread(holding_sessions, decision_clock),
                 "sources": sources, "options": options, "member_positions": positions, "multipliers": specs,
                 "paper_equity_reference": 200000, "entry_budget": 2000, "fee_per_leg": 3,
                 "technical": [{key: value for key, value in row.model_dump(mode="json").items() if key != "daily_bars"}
                               for row in capture.observations] if capture else [],
             }
+            context["directional_precheck"] = directional_precheck(context)
+            context["event_pairs"] = event_pairs(context)
             if capture:
                 capture = capture.model_copy(update={"agent_context": context})
                 archive_digest = await asyncio.to_thread(self.research_archive.save, capture, artifacts)
@@ -245,6 +252,18 @@ class StrategyService:
 
             def check_review(item: AgentStrategyPayload, scope: StrategyRunRequest) -> AgentStrategyPayload:
                 self._validate_result(item, scope, allowed_products)
+                for plan in item.agent_review.plans if item.agent_review else []:
+                    if not plan.blocked_first_choice_legs:
+                        continue
+                    try:
+                        name = f"first-choice-{plan.strategy}.json"
+                        report = AgentStrategyPayload.model_validate_json(read_run_artifact(codex_workspace.run_dir, name, max_bytes=100_000))
+                    except (FileNotFoundError, OSError, ValueError) as exc:
+                        raise StrategyValidationError("缺少可校验的冻结首选决策") from exc
+                    if report.product is None or request.mode != "all_market_scan":
+                        raise StrategyValidationError("单品种研究不能启用跨品种备选")
+                    self._validate_result(report, StrategyRunRequest(mode="single_analysis", product=report.product), allowed_products)
+                    plan.blocked_first_choice_report = report.model_dump(mode="json")
                 validate_agent_review(item, context, observations)
                 if (not scope.option_analysis_requested and item.agent_review
                     and any(plan.action == "paper_entry" for plan in item.agent_review.plans)):

@@ -163,6 +163,7 @@ export interface ResearchOpportunity {
 }
 
 export interface LiveAgentReview {
+  sizing_basis?: string | null;
   technical: { assessment: string; source_ids: string[] };
   fundamentals: { assessment: string; source_ids: string[] };
   news: { assessment: string; source_ids: string[] };
@@ -313,3 +314,28 @@ export interface FrozenContext {
   documents: Array<{ id: string; products: string[]; dimension: string; scope: string;
     title: string; excerpt: string; url: string; publisher: string; available_at: string; sha256?: string; freshness_role?: string }>;
 }
+
+export type ResearchMode = "baseline" | "primary" | "ranked";
+type TermComparison = { paired_products: number; event_clusters: number; main_mean_return_pct: number | null; far_mean_return_pct: number | null; far_minus_main_pp: number | null };
+type TermSummary = Record<"full"|"initial"|"holdout", TermComparison> & {one_day_decay?: {paired_products:number; main_pct_premium:number|null; far_pct_premium:number|null; main_pct_budget:number|null; far_pct_budget:number|null}};
+export interface FrequencyResult {
+  status: "complete" | "pending";
+  completed_days: number;
+  rows: Array<{ group: "A" | "B" | "C"; variant: ResearchMode; opened: number; open_days?: string[]; pnl: number; tail_pnl: number; drawdown_pct: number; curve: Array<{day:string; equity:number}> }>;
+  per_group: Record<"A"|"B"|"C", ResearchMode>;
+  control: Array<{id:string; opens:number; pnl:number; tail_pnl:number; drawdown_pct:number; mean_cost_pct:number}>;
+  term: TermSummary | null;
+  term_pairs: TermPair[];
+  option_anchor?: {term: TermSummary; pairs: TermPair[]} | null;
+  term_mode: "consider_far" | "compare_only";
+}
+
+
+export type FrequencySession = AgentSession & {
+  rankings?: {primary: AgentSession["decision"]; reserve: AgentSession["decision"] | null};
+  account_before?: {equity: number; cash: number; open_cost: number};
+  screen?: Array<{rank: number; product?: string; reason: string; eligible: boolean}>;
+  selected_rank?: number | null;
+};
+type PairSide = { contract: string; planned_quantity: number; legs: Array<{id: string}>; execution: {entry_cash: number; pnl_yuan: number} };
+export type TermPair = {event_at: string; product: string; entry: string; exit: string; main: PairSide; far: PairSide};

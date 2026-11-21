@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -207,7 +208,13 @@ class FakeGateway:
         self.workspace_roots.append(workspace_root)
         if self.release is not None:
             await self.release.wait()
-        return CodexRunResult(payload=self.payload, runtime=await self.status())
+        payload = self.payload
+        if workspace_root:
+            frozen = next((workspace_root / "local-data/codex-runs").glob("*/agent-context.json"), None)
+            if frozen:
+                stamp = datetime.fromisoformat(json.loads(frozen.read_bytes())["cutoff"])
+                payload = payload.model_copy(update={"as_of": stamp})
+        return CodexRunResult(payload=payload, runtime=await self.status())
 
 
 class FakeDomain(DomainSnapshotProvider):

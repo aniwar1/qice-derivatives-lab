@@ -104,12 +104,13 @@
     },
     "sleevePlan": {
       "type": "object", "additionalProperties": false,
-      "required": ["strategy", "action", "reason", "quantity", "max_holding_days", "legs", "comparison_symbols", "scenario_low", "scenario_high", "event_source_id", "event_at", "invalidation"],
+      "required": ["strategy", "action", "reason", "quantity", "max_holding_days", "legs", "blocked_first_choice_legs", "comparison_symbols", "scenario_low", "scenario_high", "event_source_id", "event_at", "invalidation"],
       "properties": {
         "strategy": {"enum": ["A", "B", "C"]}, "action": {"enum": ["wait", "paper_entry"]},
         "reason": {"$ref": "#/$defs/text"}, "quantity": {"type": "integer", "minimum": 0},
         "max_holding_days": {"type": "integer", "minimum": 0, "maximum": 5},
         "legs": {"type": "array", "items": {"type": "string"}, "maxItems": 2},
+        "blocked_first_choice_legs": {"type": "array", "items": {"type": "string"}, "maxItems": 2},
         "comparison_symbols": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
         "scenario_low": {"type": ["number", "null"]}, "scenario_high": {"type": ["number", "null"]},
         "event_source_id": {"type": ["string", "null"]}, "event_at": {"type": ["string", "null"], "format": "date-time"},

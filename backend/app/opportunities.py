@@ -32,6 +32,7 @@ def compile_opportunities(
     found = {item.product: item for item in capture.observations} if capture else {}
     accepted: dict[str, dict] = {}
     sleeves: dict[str, dict] = {}
+    admitted_groups = set()
     rejected = 0
     for index, raw in enumerate([primary, *candidates]):
         try:
@@ -45,6 +46,9 @@ def compile_opportunities(
                 raise ValueError("同批同品种重复")
             if abs(item.as_of - primary.as_of) > timedelta(minutes=5):
                 raise ValueError("候选策略与本轮时点不一致")
+            remaining = [p for p in plans if p.strategy not in admitted_groups]
+            if not remaining:
+                raise ValueError("同组本轮已有合格的首选方案")
             if index > 0:
                 item = validate(item, StrategyRunRequest(mode="single_analysis", product=item.product))
             quote = found.get(item.product)
@@ -56,9 +60,20 @@ def compile_opportunities(
         except ValueError:
             rejected += 1
             continue
+        review = item.agent_review.model_dump(mode="json")
+        for plan in review["plans"]:
+            if plan["action"] == "paper_entry" and plan["strategy"] in admitted_groups:
+                plan.update(action="wait", quantity=0, max_holding_days=0, legs=[],comparison_symbols=[],
+                            event_source_id=None, event_at=None, scenario_high=None, scenario_low=None,
+                            blocked_first_choice_legs=[], blocked_first_choice_report=None,
+                            reason="该策略本轮已有更早通过校验的品种。", invalidation="下一轮重新评估。")
+        admitted_groups.update(p.strategy for p in remaining)
         sleeves[item.product] = {"product": item.product, "analysis_contract": item.analysis_contract,
-                                 "as_of": item.as_of.isoformat(), "agent_review": item.agent_review.model_dump(mode="json")}
-        if item.decision == "wait":
+                                 "as_of": item.as_of.isoformat(), "agent_review": review}
+        if item.option_expression is None or not any(
+            p.strategy in {"A", "B"} and p.legs[0].upper().replace("-", "") == item.option_expression.symbol.upper().replace("-", "")
+            for p in remaining
+        ):
             continue
         accepted[item.product] = {
             "product": item.product, "product_name": item.product_name, "contract": item.analysis_contract,

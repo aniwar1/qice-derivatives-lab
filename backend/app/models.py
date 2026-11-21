@@ -408,6 +408,8 @@ class SleevePlan(StrictModel):
     quantity: int = Field(ge=0)
     max_holding_days: int = Field(ge=0, le=5)
     legs: list[str] = Field(max_length=2)
+    blocked_first_choice_report: dict | None = None
+    blocked_first_choice_legs: list[str] = Field(default_factory=list, max_length=2)
     comparison_symbols: list[str] = Field(default_factory=list, max_length=4)
     scenario_low: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     scenario_high: float | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -428,6 +430,7 @@ class SleevePlan(StrictModel):
 
 
 class AgentReview(StrictModel):
+    sizing_basis: str | None = Field(default=None, max_length=350)
     technical: EvidenceAssessment
     fundamentals: EvidenceAssessment
     news: EvidenceAssessment

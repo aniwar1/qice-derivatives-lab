@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -35,6 +36,7 @@ class MarketObservation(StrictModel):
     artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     chain_status: str | None = None
     daily_status: str | None = None
+    forward_quotes: list[dict[str, Any]] = Field(default_factory=list, max_length=2)
     daily_bars: list[dict[str, Any]] = Field(default_factory=list, max_length=120)
 
     @model_validator(mode="after")
@@ -112,6 +114,7 @@ class ResearchArchive:
         digests = {row.artifact_sha256 for row in capture.observations}
         if capture.agent_context:
             digests.update(row["sha256"] for row in capture.agent_context.get("options", {}).get("books", []))
+            digests.update(row["sha256"] for row in capture.agent_context.get("options", {}).get("expiry_sources", []))
             digests.update(row["sha256"] for row in capture.agent_context.get("member_positions", {}).get("items", []))
         return digests
 
@@ -239,6 +242,30 @@ def _source_time(value: str) -> datetime:
     return parsed if parsed.utcoffset() is not None else parsed.replace(tzinfo=BJT)
 
 
+def _forward_quotes(raw: dict, product: str, main: str, captured: datetime) -> list[dict]:
+    quotes = {}
+    for row in raw.get("actual_contract_chain") or []:
+        if not isinstance(row, dict):
+            continue
+        symbol = row.get("symbol", "")
+        if not isinstance(symbol, str) or not CONTRACT.fullmatch(symbol) or symbol[:-4] != product or symbol <= main:
+            continue
+        if row.get("chain_row_status") != "rankable_positive_open_interest":
+            continue
+        try:
+            price, volume, oi = (float(row[k]) for k in ("price", "volume", "open_interest"))
+            bid, ask = float(row["bid"]), float(row["ask"])
+            stamp = _source_time(row["quote_time"])
+        except (ValueError, TypeError, KeyError):
+            continue
+        if (not all(math.isfinite(x) and x > 0 for x in (price, volume, oi, bid, ask)) or bid > ask
+            or not 0 <= (captured - stamp).total_seconds() <= 120):
+            continue
+        quotes[symbol] = {"contract": symbol, "price": price, "volume": volume, "open_interest": oi,
+                          "bid": bid, "ask": ask, "observed_at": stamp.isoformat(), "available_at": captured.isoformat()}
+    return [quotes[k] for k in sorted(quotes)[:2]]
+
+
 def _observation(product: str, blob: bytes, captured_at: datetime, contract: str | None) -> MarketObservation | None:
     raw = json.loads(blob)
     if raw.get("success") is not True:
@@ -257,6 +284,7 @@ def _observation(product: str, blob: bytes, captured_at: datetime, contract: str
         available_at=captured_at, price=quote["price"], source=quote["source_url"],
         artifact_sha256=sha256(blob).hexdigest(), chain_status=chain.get("selection_claim"),
         daily_status=daily.get("status"),
+        forward_quotes=_forward_quotes(raw, product, quote["symbol"], captured_at) if contract is None else [],
         daily_bars=[
             {key: bar[key] for key in BAR_COLUMNS if key in bar}
             for bar in (technical.get("completed_daily_rows") or [])[-120:]

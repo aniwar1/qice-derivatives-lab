@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+from .live_expiry import pair_survives
+from .live_paper import entry_budget
 from .models import AgentStrategyPayload, EvidenceDomainSummary, SourceReference
 from .research_archive import MarketObservation
 
@@ -31,8 +33,43 @@ def _examine_facts(result: AgentStrategyPayload, context: dict, cutoff: datetime
     return facts
 
 
+def _check_backup(plan, selected_product, context, books, cutoff, observations):
+    prior = plan.blocked_first_choice_legs
+    if not prior:
+        return
+    policy = context.get("research_policy", {}).get("per_group", {})
+    if (policy.get(plan.strategy) != "ranked" or plan.action != "paper_entry"
+        or len(prior) != (2 if plan.strategy == "C" else 1) or set(prior) == set(plan.legs)):
+        raise ValueError("本组无已授权的条件备选")
+    ticks = [books.get(symbol) for symbol in prior]
+    if any(t is None or _stamp(t["available_at"]) > cutoff
+           or not cutoff - timedelta(minutes=2) <= _stamp(t["observed_at"]) <= cutoff for t in ticks):
+        raise ValueError("首选合约缺少当时的有效盘口")
+    contract = ticks[0]["contract"]
+    if any(t["contract"] != contract for t in ticks) or (plan.strategy == "C" and {t["side"] for t in ticks} != {"C", "P"}):
+        raise ValueError("首选的合约月份或腿数无效")
+    product = contract[:-4]
+    if product == selected_product:
+        raise ValueError("条件备选必须与首选属于不同品种")
+    if not plan.blocked_first_choice_report:
+        raise ValueError("无法核验首选同组策略的完整三面分析")
+    first = AgentStrategyPayload.model_validate(plan.blocked_first_choice_report)
+    if (first.product != product or not first.agent_review or any(p.blocked_first_choice_legs or p.blocked_first_choice_report for p in first.agent_review.plans)):
+        raise ValueError("首选品种或递归备选无效")
+    active = [p for p in first.agent_review.plans if p.action == "paper_entry"]
+    if (len(active) != 1 or active[0].strategy != plan.strategy or set(active[0].legs) != set(prior)):
+        raise ValueError("首选策略组或期权腿不匹配")
+    validate_agent_review(first, context, observations, check_budget=False)
+    fs = _examine_facts(first, context, cutoff)
+    timely = bool(fs["news"] and any(r.get("freshness_role") != "low_frequency_background_only" for r in fs["fundamentals"]))
+    budget = entry_budget(context, plan.strategy, product, timely)
+    cost = sum(t["ask"] * context["multipliers"][product] + 2 * context["fee_per_leg"] for t in ticks)
+    if cost <= budget:
+        raise ValueError("首选通过账户与整数手预算预检，不能启用备选")
+
+
 def validate_agent_review(result: AgentStrategyPayload, context: dict,
-                          observations: list[MarketObservation]) -> None:
+                          observations: list[MarketObservation], *, check_budget: bool = True) -> None:
     review = result.agent_review
     if review is None:
         raise ValueError("缺少本轮 Agent 三面复核")
@@ -60,6 +97,8 @@ def validate_agent_review(result: AgentStrategyPayload, context: dict,
     directional = [plan for plan in entries if plan.strategy in ("A", "B")]
     if bool(directional) != (result.decision in ("long_call", "long_put")):
         raise ValueError("主策略与 A/B 计划不一致")
+    if any(p.blocked_first_choice_legs for p in review.plans if p.action == "wait"):
+        raise ValueError("等待方案不得调用备选")
     if not entries:
         return
     quote = next((observed[key] for key in review.technical.source_ids
@@ -79,16 +118,30 @@ def validate_agent_review(result: AgentStrategyPayload, context: dict,
             row.get("scope") == "direct" for row in timely_fundamentals
         )):
             raise ValueError("A 缺少该品种直接基本面或相关消息的引用")
+        _check_backup(plan, result.product, context, books, cutoff, observations)
         ticks = [books.get(symbol) for symbol in plan.legs]
-        if any(tick is None or tick["contract"] != quote.contract or _stamp(tick["available_at"]) > cutoff
+        term_contract = quote.contract
+        spot = quote.price
+        if plan.strategy == "C" and ticks[0] and ticks[0]["contract"] != quote.contract:
+            term_contract = ticks[0]["contract"]
+            term = next((f for f in quote.forward_quotes if f["contract"] == term_contract), None)
+            if (not term or context.get("research_policy", {}).get("term_mode") != "consider_far"
+                or not any(p["contract"] == quote.contract for p in context.get("event_pairs", []))
+                or not cutoff - timedelta(minutes=2) <= _stamp(term["observed_at"]) <= cutoff
+                or _stamp(term["available_at"]) > cutoff):
+                raise ValueError("远月须经研究政策启用且具备当期可执行的近远月对照")
+            spot = term["price"]
+        if not check_budget and plan.strategy in {"A", "B"} and ticks[0] and (ticks[0]["strike"] - spot) * (1 if ticks[0]["side"] == "C" else -1) <= 0:
+            raise ValueError("缺少首选虚值腿证据")
+        if any(tick is None or tick["contract"] != term_contract or _stamp(tick["available_at"]) > cutoff
                or not cutoff - timedelta(minutes=2) <= _stamp(tick["observed_at"]) <= cutoff
                or plan.quantity > min(tick["bid_size"], tick["ask_size"]) for tick in ticks):
             raise ValueError("缺少模拟手数所需的同期同月买卖盘口")
         cost = sum(tick["ask"] * multiplier + context["fee_per_leg"] for tick in ticks) * plan.quantity
-        budget = context["entry_budget"]
-        if plan.strategy == "B" and (not timely_fundamentals or not facts["news"]):
-            budget *= 0.5
-        if cost > budget:
+        budget = entry_budget(context, plan.strategy, result.product, bool(timely_fundamentals and facts["news"]))
+        if "paper_account" in context:
+            cost += len(ticks) * plan.quantity * context["fee_per_leg"]
+        if check_budget and cost > budget:
             raise ValueError("模拟组合超过入场预算")
         if plan.strategy == "A":
             tick = ticks[0]
@@ -101,20 +154,43 @@ def validate_agent_review(result: AgentStrategyPayload, context: dict,
             if target is None or ((target - tick["strike"]) * (1 if tick["side"] == "C" else -1) - tick["ask"]) * multiplier <= context["fee_per_leg"] * 2:
                 raise ValueError("A 的方向情景未覆盖期权成本与费用")
         if plan.strategy == "C":
+            if "paper_account" in context and term_contract == quote.contract and quote.observed_at < cutoff - timedelta(minutes=2):
+                raise ValueError("事件策略须有与双腿同期的标的月报价")
             if result.session_daily_bar is None or result.session_daily_bar.product != result.product:
                 raise ValueError("事件双买缺少绑定标的的交易时段证据")
             event = next((row for row in facts["news"] if row["id"] == plan.event_source_id), None)
+            last = cutoff + timedelta(days=plan.max_holding_days)
+            if "holding_sessions" in context:
+                days = context["holding_sessions"]
+                if len(days) < plan.max_holding_days:
+                    raise ValueError("缺少事件持有期对应的交易日历")
+                last = _stamp(days[plan.max_holding_days - 1] + "T15:00:00+08:00")
+            if "holding_sessions" in context and not pair_survives(ticks, context, last):
+                raise ValueError("计划退出超过所选月份的保守到期缓冲")
+            if term_contract != quote.contract:
+                sides = {t["side"]: t for t in ticks}
+                if set(sides) != {"C", "P"}:
+                    raise ValueError("宽跨式须包含两侧")
+                c = (sides["C"]["strike"] / spot - 1) * 100
+                p = (1 - sides["P"]["strike"] / spot) * 100
+                if not (0.5 <= c <= 5 and 0.5 <= p <= 5 and any(
+                    pair["contract"] == quote.contract and pair["max_lots"] >= plan.quantity and last < _stamp(pair["exit_before"])
+                    and 0.5 <= pair["call_otm_pct"] <= 5 and 0.5 <= pair["put_otm_pct"] <= 5
+                    and abs(c - pair["call_otm_pct"]) <= 1 and abs(p - pair["put_otm_pct"]) <= 1
+                    for pair in context.get("event_pairs", [])
+                )):
+                    raise ValueError("缺少虚值程度与手数可比的同期近月双腿")
             if (event is None or not event.get("scheduled_at") or not plan.event_at
                 or plan.event_at != _stamp(event["scheduled_at"]) or cutoff >= plan.event_at
-                or plan.event_at > cutoff + timedelta(days=plan.max_holding_days)):
+                or plan.event_at > last):
                 raise ValueError("事件交易缺少持有窗口内可核验的事前日程")
             stamps = [_stamp(tick["observed_at"]) for tick in ticks]
             if max(stamps) - min(stamps) > timedelta(seconds=5):
                 raise ValueError("两腿盘口时间差超过五秒")
             if ({tick["side"] for tick in ticks} != {"C", "P"}
-                or any((tick["strike"] - quote.price) * (1 if tick["side"] == "C" else -1) <= 0 for tick in ticks)):
+                or any((tick["strike"] - spot) * (1 if tick["side"] == "C" else -1) <= 0 for tick in ticks)):
                 raise ValueError("宽跨式须为同月份两侧的虚值看涨及看跌")
-            if plan.scenario_low is None or plan.scenario_high is None or not plan.scenario_low < quote.price < plan.scenario_high:
+            if plan.scenario_low is None or plan.scenario_high is None or not plan.scenario_low < spot < plan.scenario_high:
                 raise ValueError("事件策略缺少双向波动情景")
             strikes = {tick["side"]: tick["strike"] for tick in ticks}
             intrinsic = max(plan.scenario_high - strikes["C"], strikes["P"] - plan.scenario_low, 0)
@@ -163,8 +239,12 @@ def bind_public_domains(result: AgentStrategyPayload, context: dict,
     option_domain = summary(result.option_market.conclusion if tick_refs else "本轮没有用于模拟建仓的有效期权盘口引用。", tick_refs)
     if tick_refs:
         option_domain.freshness = "fresh"
+    account = context.get("paper_account") or {}
+    basis = (f"依据 {account['as_of']} 的现场模拟账本，按各策略余额、已用成本和在手品种校验。"
+             if account.get("status") == "observed" else
+             "现场模拟账户现金及持仓未知。本轮手数仅为按参考本金 20 万元测算的独立条件计划。")
     return result.model_copy(update={
-        "agent_review": review.model_copy(update={"positioning": review.positioning.model_copy(update={
+        "agent_review": review.model_copy(update={"sizing_basis": basis, "positioning": review.positioning.model_copy(update={
             "assessment": ownership
         })}),
         "technical_structure": tech_domain,

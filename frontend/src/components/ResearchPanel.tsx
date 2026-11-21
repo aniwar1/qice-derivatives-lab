@@ -133,6 +133,7 @@ export function ResearchPanel({ revision, initialRunId }: { revision: number; in
               return <div key={key}><dt>{{technical:"技术面", fundamentals:"基本面", news:"消息面"}[key]}</dt>
                 <dd>{part.assessment}</dd>{!!part.source_ids.length && <dd>引用 {part.source_ids.join("、")}</dd>}</div>;
             })}</dl>
+            {current.run.result.strategy.agent_review.sizing_basis && <p>仓位依据 · {current.run.result.strategy.agent_review.sizing_basis}</p>}
             <p>持仓归属 · {current.run.result.strategy.agent_review.positioning.assessment}</p>
             {current.run.result.strategy.agent_review.plans.map(plan => <details key={plan.strategy} className="table-details">
               <summary>{plan.strategy} · {plan.action === "wait" ? "等待" : "模拟入场计划"}</summary><p>{plan.reason}</p>

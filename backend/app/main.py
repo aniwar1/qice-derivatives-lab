@@ -23,7 +23,7 @@ from .db import ActiveRunConflict, StrategyStore
 from .models import StrategyRunAccepted, StrategyRunRequest, StrategyRunView
 from .service import InvalidStrategyScope, StrategyService
 from .sse import run_event_stream
-from . import study_view
+from . import study_view, experiment_view
 
 
 def create_app(
@@ -133,6 +133,35 @@ def create_app(
         }
 
     study_directory = configured.workspace_root / "local-data" / "agent-study" / study_view.BATCH
+
+    @app.get("/api/workbench/frequency-study")
+    async def frequency_study() -> dict:
+        try:
+            return await asyncio.to_thread(experiment_view.compare, configured.workspace_root)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(status_code=409, detail="频率与期限实验档案无法核对。") from exc
+
+    @app.get("/api/workbench/frequency-study/sessions/{variant}/{group}/{day}")
+    async def frequency_session(variant: str, group: str, day: date) -> dict:
+        try:
+            session = await asyncio.to_thread(
+                experiment_view.read_session, configured.workspace_root, variant, group, day
+            )
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            raise HTTPException(status_code=409, detail="该日的决策档案无法读取。") from exc
+        if session is None:
+            raise HTTPException(status_code=404, detail="本机未归档该日策略。")
+        return session
+
+    @app.get("/api/workbench/frequency-study/{part}")
+    async def frequency_details(part: str) -> dict:
+        if part not in {"replay", "term", "term-option", "control"}:
+            raise HTTPException(status_code=404)
+        folder = study_directory.with_name(study_directory.name + "-frequency")
+        doc = await asyncio.to_thread(experiment_view.read_file, folder / (part + ".json"))
+        if doc is None:
+            raise HTTPException(status_code=404, detail="实验结果尚未生成。")
+        return doc
 
     @app.get("/api/workbench/agent-replay")
     async def agent_replay() -> dict:

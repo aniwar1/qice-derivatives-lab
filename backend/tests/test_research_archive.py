@@ -127,9 +127,13 @@ async def test_market_batch_persists_multiple_candidates_and_replays_frozen_evid
             assert terminal["status"] == "completed"
             base = f"/api/research/runs/{run_id}"
             result = (await client.get(base)).json()
+            frozen = result["archive"]["agent_context"]
+            assert frozen["paper_account"]["status"] == "unavailable" and frozen["paper_account"]["sleeves"] is None
+            assert frozen["research_policy"] == {"term_mode": "compare_only", "per_group": dict.fromkeys("ABC", "baseline")}
+            assert frozen["directional_precheck"] == {"A": [], "B": []}
             assert result["candidate_status"] == "returned"
-            assert result["excluded_count"] == 2
-            assert {item["product"] for item in result["opportunities"]} == {"M", "JM"}
+            assert result["excluded_count"] == 3
+            assert {item["product"] for item in result["opportunities"]} == {"JM"}
             assert len(result["archive"]["observations"]) == 2
             digest = result["archive"]["observations"][0]["artifact_sha256"]
             raw = await client.get(f"{base}/evidence/{digest}")
@@ -154,7 +158,7 @@ async def test_market_batch_persists_multiple_candidates_and_replays_frozen_evid
             assert historical["observations"] == []
             assert historical["excluded_after_cutoff"] == 2
 
-            timestamp = primary.as_of + timedelta(milliseconds=2)
+            timestamp = datetime.fromisoformat(result["archive"]["agent_context"]["cutoff"]) + timedelta(milliseconds=2)
             observation, blob = evidence("JM", "JM2701", timestamp, timestamp + timedelta(milliseconds=1), price=3445)
             later = ResearchCapture(run_id="later", captured_at=observation.available_at, expected_products=["JM"], observations=[observation], gaps={})
             service.research_archive.save(later, blob)
@@ -212,3 +216,26 @@ def test_supplementary_originals_and_release_times_are_frozen_atomically(tmp_pat
     assert archive.evidence("frozen", digest) == raw
     assert archive.evidence("frozen", detail_hash) == detail
     assert archive.evidence("other-run", detail_hash) is None
+
+
+def test_sleeve_dedup_keeps_independent_c_from_later_b_and_c(tmp_path):
+    from app.models import AgentStrategyPayload, StrategyRunRequest
+    from app.opportunities import compile_opportunities
+
+    def proposal(product, groups):
+        raw = strategy_payload(decision='long_call', product=product).model_dump(mode='json')
+        for plan in raw['agent_review']['plans']:
+            if plan['strategy'] in groups:
+                legs = [raw['option_expression']['symbol']]
+                if plan['strategy']=='C':
+                    legs.append(raw['analysis_contract']+'-P-3300')
+                plan.update(action='paper_entry',legs=legs,max_holding_days=1,quantity=1)
+        return AgentStrategyPayload.model_validate(raw)
+    first, second = proposal('JM',{'A','B'}), proposal('M',{'B','C'})
+    (tmp_path/'opportunities.json').write_text(json.dumps([second.model_dump(mode='json')]))
+    rows = [evidence(p.product,p.analysis_contract,p.market_levels.quote_at,p.as_of)[0] for p in (first,second)]
+    capture = ResearchCapture(run_id='one',captured_at=max(r.available_at for r in rows),expected_products=['JM','M'],observations=rows,gaps={})
+    group = compile_opportunities(first,StrategyRunRequest(),capture,tmp_path,lambda item,_:item)
+    assert group['excluded_count']==0 and [o['product'] for o in group['opportunities']]==['JM']
+    late = group['sleeve_plans'][1]['agent_review']['plans']
+    assert [(p['strategy'],p['action'],p['quantity']) for p in late] == [('A','wait',0),('B','wait',0),('C','paper_entry',1)]

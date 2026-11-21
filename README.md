@@ -14,7 +14,7 @@ cd qice-derivatives-lab
 ./start.sh
 ```
 
-打开 <http://127.0.0.1:8000>。首页读取本机的半年 Agent 回测。新安装可先浏览「十月历史基线」的策略计划和「品种研究」中的观察项。要采集行情和生成研究结论，先安装 Codex CLI 并执行 `codex login`，再选择「运行全市场研究」或在品种页点击「运行单品种分析」。
+打开 <http://127.0.0.1:8000>。首页读取本机的半年策略频率与双买期限对照。新安装可先浏览「十月历史基线」的策略计划和「品种研究」中的观察项。要采集行情和生成研究结论，先安装 Codex CLI 并执行 `codex login`，再选择「运行全市场研究」或在品种页点击「运行单品种分析」。
 
 服务只监听回环地址，按 `Ctrl+C` 停止。端口冲突时可用 `./start.sh --port 8080`。可用 `PYTHON_BIN=python3.12 ./start.sh` 指定解释器。行情查询和生成新策略需要联网，已保存的策略可离线回看。
 
@@ -22,6 +22,7 @@ cd qice-derivatives-lab
 
 | 入口 | 能看到什么 |
 | --- | --- |
+| 频率与期限对照 | 比较原版、成本上下文增强后的首选和主备版本。按策略切换收益曲线，逐日核对模型理由与预算筛查，也可查看相同事件下主力月和远月的两腿成本。 |
 | 半年 Agent 回测 | 比较三个独立账户的收益、回撤和开平仓，选定日期可读 Agent 的三面判断、风险预算与执行回执。选择任一品种可核对该时点的原文、期货合约和可选期权腿。 |
 | 十月历史基线 | 并排比较多因子方向买权、技术择强买权和事件驱动宽跨式。切换累计收益率与组合权益，查看逐日数据、期末收益率和最大回撤。 |
 | 策略计划 | 每套策略的候选排序、合约选择、仓位预算与退出规则。导入回测后，可按交易日核对期权腿、开平仓和期末损益。 |
@@ -61,6 +62,33 @@ study_dir="local-data/agent-study/2026-05-21_2026-11-20"
 ```
 
 采集器按日期和来源记载缺口。可通过官方地址清单补采已脱离目录分页的原稿，或用 `--gfex-history` 导入已锁定摘要的广期所历史期货快照。依赖当前网站可用性的重新采集，可能得到不同覆盖。要复核同一批次，请保留原始 `market/`、`monthly/`、来源原件及 `receipts/`。回执未齐时，权益只计算从期初开始的连续交易日。
+
+## 出手频率与双买期限
+
+在同一份冻结档案上，系统分别回答三个问题。每项实验独立出账。
+
+| 问题 | 如何对照 |
+| --- | --- |
+| 成本和仓位上下文能否改善 Agent 的选品？ | 模型按前收看到每个整手的权利金、50 / 100 个基点预算可买的手数、带来源和日期的同口径仓单变化、证据新鲜度及压力情景。程序在下一开盘前用模拟账户逐组筛查。首选版只审第一项，主备版按同一份模型回执依次审两个不同品种，开盘未成交即结束当天委托。 |
+| 更频繁尝试固定信号能多赚多少？ | 固定合约趋势、0.5% 预算、持有期与费用，分别按每天和每五个交易日筛选。列出低频的五个起始相位，无论盈亏都计入。结果可与 Agent 账本分别查看。 |
+| C 策略是否应优先远月？ | 对事先已知的国家统计局事件，按前日持仓量确定主力期货，并按各自月份的期货价格匹配虚值看涨和看跌。每种结构独立分配 2,000 元，核对四条腿的价格、成交量与期限。按独立事件等权，分母统一为预算。另按期权全行权价的看涨看跌合计持仓量重新定义主力月。用实际到期日、前收和零利率 Black-76 模型估计固定标的与隐波时的一天损耗，与实际盈亏分列。 |
+
+策略升级要求该组开仓数增加、全期与最后 42 日净损益均提高、最大回撤增加不超过 0.5 个百分点。主备版还须分别超过首选版和原版。远月取得候选优先资格的条件是全期至少 10 个可配对的独立事件，后段至少 5 个，并在两个区间都有正的远月平均收益和相对主力的优势。最后 42 日沿用前段现金与持仓，属于同一历史窗口。留存的回执支持独立复算。
+
+```bash
+export PYTHONPATH=backend:.
+study_dir="local-data/agent-study/2026-05-21_2026-11-20"
+experiment_dir="${study_dir}-frequency"
+.venv/bin/python -m scripts.collect_option_expiries --study "$study_dir" --out "$experiment_dir"
+.venv/bin/python -m scripts.frequency_replay --source "$study_dir" --output "$experiment_dir"
+.venv/bin/python -m scripts.frequency_control --study "$study_dir" --out "$experiment_dir"
+.venv/bin/python -m scripts.term_study --study "$study_dir" --out "$experiment_dir/term.json"
+.venv/bin/python -m scripts.term_study --study "$study_dir" --anchor option --out "$experiment_dir/term-option.json"
+```
+
+首次运行排序实验会产生新的模型回执。相同协议下，给 `scripts.frequency_replay` 加上 `--settle-frozen` 即可仅用已有回执重算。摘要接口为 `GET /api/workbench/frequency-study`，`replay`、`control`、`term` 和 `term-option` 子路径提供完整账目。
+
+现场研究可读取独立纸面账户快照 `local-data/forward-paper-account.json`。快照格式为 `forward_paper_account.v1`，`as_of` 和 `valid_until` 均带时区，`sleeves` 下的 A、B、C 各有 `cash`、`equity` 与 `positions`。持仓逐笔列出 `product`、`contract`、`quantity` 和 `open_cost`。快照有效时按各组当前现金、权益和已占预算筛选。缺少有效快照时，档案明确提示资金和持仓未知，仅按参考本金给出条件计划。半年回测的期末余额只属于各自的历史模拟账本。
 
 ## 从行情到策略
 
