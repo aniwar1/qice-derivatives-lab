@@ -57,6 +57,7 @@ class ResearchCapture(StrictModel):
     observations: list[MarketObservation]
     gaps: dict[str, str]
     policy_hashes: dict[str, str] = Field(default_factory=dict)
+    agent_context: dict[str, Any] | None = None
 
     @field_validator("captured_at")
     @classmethod
@@ -106,8 +107,53 @@ class ResearchArchive:
                     ON observations (contract, available_at);
             """)
 
+    @staticmethod
+    def _market_digests(capture: ResearchCapture) -> set[str]:
+        digests = {row.artifact_sha256 for row in capture.observations}
+        if capture.agent_context:
+            digests.update(row["sha256"] for row in capture.agent_context.get("options", {}).get("books", []))
+            digests.update(row["sha256"] for row in capture.agent_context.get("member_positions", {}).get("items", []))
+        return digests
+
+    def _official_paths(self, capture: ResearchCapture) -> dict[str, Path]:
+        context = capture.agent_context
+        if not context:
+            return {}
+        root = self.path.parent / "agent-sources"
+        paths = {}
+        cutoff = datetime.fromisoformat(context["cutoff"])
+        for row in context["sources"]["items"]:
+            times = [datetime.fromisoformat(row[field]) for field in ("published_at", "available_at", "retrieved_at")]
+            if (cutoff.utcoffset() is None or any(t.utcoffset() is None or t > cutoff for t in times)
+                or row["authority"] != "primary_official"):
+                raise ValueError("权威资料时点或来源级别未通过归档校验")
+            digest = row["sha256"]
+            if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ValueError("权威资料摘要格式无效")
+            raw = row.get("raw")
+            if raw is None:
+                paths[digest] = root / "blobs" / digest
+            elif raw in (f"originals/{digest}.html", f"originals/{digest}.pdf"):
+                paths[digest] = root / "supplement" / raw
+            else:
+                raise ValueError("权威资料原件路径不匹配")
+            if index := row.get("disclosure_index_sha256"):
+                if not re.fullmatch(r"[0-9a-f]{64}", index) or row.get("disclosure_index_raw") != f"originals/{index}.json":
+                    raise ValueError("披露索引原件路径不匹配")
+                paths[index] = root / "supplement" / "originals" / (index + ".json")
+        return paths
+
+    @staticmethod
+    def _read_official(path: Path, digest: str) -> bytes:
+        if not path.is_file():
+            raise ValueError("本轮权威来源原件缺失")
+        raw = path.read_bytes()
+        if sha256(raw).hexdigest() != digest:
+            raise ValueError("本轮权威来源原件摘要不符")
+        return raw
+
     def save(self, capture: ResearchCapture, artifacts: dict[str, bytes]) -> str:
-        expected = {row.artifact_sha256 for row in capture.observations}
+        expected = self._market_digests(capture)
         if set(artifacts) != expected or any(sha256(blob).hexdigest() != key for key, blob in artifacts.items()):
             raise ValueError("归档行情原件与摘要不符")
         body = capture.model_dump_json()
@@ -121,10 +167,14 @@ class ResearchArchive:
                         raise ValueError("已冻结的研究证据不能被替换")
                 else:
                     db.execute("INSERT INTO captures VALUES (?, ?, ?)", [capture.run_id, body, digest])
-                    if capture.observations:
+                    objects = dict(artifacts)
+                    for key, path in self._official_paths(capture).items():
+                        objects[key] = self._read_official(path, key)
+                    if objects:
                         db.executemany(
-                            "INSERT INTO evidence_objects VALUES (?, ?) ON CONFLICT DO NOTHING", list(artifacts.items()),
+                            "INSERT INTO evidence_objects VALUES (?, ?) ON CONFLICT DO NOTHING", list(objects.items()),
                         )
+                    if capture.observations:
                         db.executemany(
                             "INSERT INTO observations VALUES (?, ?, ?, ?, ?, ?)",
                             [
@@ -151,10 +201,16 @@ class ResearchArchive:
 
     def evidence(self, run_id: str, digest: str) -> bytes | None:
         capture = self.get(run_id)
-        if capture is None or not any(row.artifact_sha256 == digest for row in capture[0].observations):
+        if capture is None or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            return None
+        official = self._official_paths(capture[0])
+        if digest not in official and digest not in self._market_digests(capture[0]):
             return None
         with self.lock, self._connect() as db:
             row = db.execute("SELECT content FROM evidence_objects WHERE sha256 = ?", [digest]).fetchone()
+        if row is None and digest in official:
+            # 兼容原件仅保存在本地内容仓库的既有现场研究。
+            return self._read_official(official[digest], digest)
         if row is None or sha256(row[0]).hexdigest() != digest:
             raise ValueError("归档行情原件未通过摘要校验")
         return row[0]

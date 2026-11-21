@@ -26,25 +26,27 @@ def compile_opportunities(
     request: StrategyRunRequest,
     capture: ResearchCapture | None,
     run_dir: Path,
-    validate: Callable[[AgentStrategyPayload, StrategyRunRequest], None],
+    validate: Callable[[AgentStrategyPayload, StrategyRunRequest], AgentStrategyPayload],
 ) -> dict[str, Any]:
     status, candidates = read_candidates(run_dir) if request.mode == "all_market_scan" and request.option_analysis_requested else ("not_requested", [])
     found = {item.product: item for item in capture.observations} if capture else {}
     accepted: dict[str, dict] = {}
+    sleeves: dict[str, dict] = {}
     rejected = 0
     for index, raw in enumerate([primary, *candidates]):
         try:
             item = primary if index == 0 else AgentStrategyPayload.model_validate(raw)
-            if index == 0 and item.decision not in ("long_call", "long_put"):
+            plans = [p for p in item.agent_review.plans if p.action == "paper_entry"] if item.agent_review else []
+            if index == 0 and not plans and item.decision == "wait":
                 continue
-            if item.decision not in ("long_call", "long_put") or not item.product or not item.option_expression:
-                raise ValueError("机会不符合买方期权合同")
-            if item.product in accepted or (index > 0 and item.product == primary.product):
+            if not item.product or (item.decision not in ("long_call", "long_put") and not plans):
+                raise ValueError("机会缺少合格的期权计划")
+            if item.product in sleeves or (index > 0 and item.product == primary.product):
                 raise ValueError("同批同品种重复")
             if abs(item.as_of - primary.as_of) > timedelta(minutes=5):
                 raise ValueError("候选策略与本轮时点不一致")
             if index > 0:
-                validate(item, StrategyRunRequest(mode="single_analysis", product=item.product))
+                item = validate(item, StrategyRunRequest(mode="single_analysis", product=item.product))
             quote = found.get(item.product)
             if (quote is None or quote.contract != item.analysis_contract or quote.available_at > item.as_of
                 or item.as_of - quote.observed_at > timedelta(minutes=30)
@@ -53,6 +55,10 @@ def compile_opportunities(
                 raise ValueError("买方机会缺少同月、同一决策窗口的本机行情证据")
         except ValueError:
             rejected += 1
+            continue
+        sleeves[item.product] = {"product": item.product, "analysis_contract": item.analysis_contract,
+                                 "as_of": item.as_of.isoformat(), "agent_review": item.agent_review.model_dump(mode="json")}
+        if item.decision == "wait":
             continue
         accepted[item.product] = {
             "product": item.product, "product_name": item.product_name, "contract": item.analysis_contract,
@@ -66,7 +72,8 @@ def compile_opportunities(
             "option": item.option_expression.model_dump(mode="json"),
             "market_evidence_sha256": quote.artifact_sha256,
         }
-    return {"candidate_status": status, "excluded_count": rejected, "opportunities": list(accepted.values())}
+    return {"candidate_status": status, "excluded_count": rejected, "opportunities": list(accepted.values()),
+            "sleeve_plans": list(sleeves.values())}
 
 
 def compare_opportunities(previous: list[dict], current: list[dict]) -> dict[str, list[str]]:

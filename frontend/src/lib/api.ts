@@ -1,3 +1,4 @@
+import type { Study, FrozenContext } from "../types";
 import type {
   RunEvent,
   ResearchDetail,
@@ -117,3 +118,9 @@ export const getWorkbenchBacktest = async (signal?: AbortSignal): Promise<Workbe
 
 export const getProductAnalysis = async (product: string, signal?: AbortSignal): Promise<ProductAnalysis> =>
   readJson(await fetch(endpoint(`/api/workbench/products/${encodeURIComponent(product)}`), { signal }));
+
+export const getAgentStudy = async (signal?: AbortSignal): Promise<Study> =>
+  readJson(await fetch(endpoint("/api/workbench/agent-replay"), { signal }));
+
+export const getFrozenContext = async (day: string, signal?: AbortSignal): Promise<FrozenContext> =>
+  readJson(await fetch(endpoint(`/api/workbench/agent-replay/context/${encodeURIComponent(day)}`), { signal }));

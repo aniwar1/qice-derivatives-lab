@@ -116,7 +116,7 @@ async def test_api_refresh_dashboard_and_sse(settings) -> None:
             assert dashboard.status_code == 200
             projected = dashboard.json()
             assert projected["system"]["hidden_reasoning_persisted"] is False
-            assert projected["latest_strategy"]["directional_view"] == "long"
+            assert projected["latest_strategy"]["directional_view"] == "uncertain"
             assert projected["latest_strategy_record"]["source"]["provider"] == "codex"
             assert projected["evidence"][0]["status"]["integrity"] == "unverified"
             assert projected["latest_strategy_status"]["state"] == "current"

@@ -162,9 +162,18 @@ export interface ResearchOpportunity {
   option_sources: Array<{ url: string; title: string }>;
 }
 
+export interface LiveAgentReview {
+  technical: { assessment: string; source_ids: string[] };
+  fundamentals: { assessment: string; source_ids: string[] };
+  news: { assessment: string; source_ids: string[] };
+  positioning: { classification: string; assessment: string };
+  plans: Array<{ strategy: "A" | "B" | "C"; action: "wait" | "paper_entry"; reason: string; quantity: number; max_holding_days: number; legs: string[]; invalidation: string }>;
+}
+
 export interface ResearchDetail {
   run: StrategyRunView & {
     result?: { strategy: {
+      agent_review?: LiveAgentReview | null;
       decision: string;
       as_of: string;
       rationale: { thesis: string; strongest_counterevidence: string };
@@ -276,4 +285,31 @@ export interface ProductAnalysis {
       };
     } | null;
   } | null;
+}
+
+export type AgentSession = {
+  day: string; cutoff: string; context_sha256: string;
+  decision: { product: string; action: string; technical: string; fundamentals: string; news: string; ownership: string;
+    thesis: string; invalidation: string; max_entry_premium?: number; max_lots?: number;
+    take_profit_close?: number; invalidation_price?: number; scenario_low?: number; scenario_high?: number; risk_bps: number; holding_days: number; legs: string[]; evidence_ids: string[] };
+  execution: { status: string; reason: string; quantity?: number; raw_open_prices?: number[]; premium_and_fees?: number; effective_risk_bps?: number; budget_reason?: string; exits: Array<{ product: string; entry_day: string; pnl: number; reason: string }> };
+};
+type Plan = { id: "A" | "B" | "C"; stats: { return_pct: number | null; drawdown_pct: number | null; realized: number | null; open_pnl: number | null; opened: number; closed: number };
+  curve: Array<{ day: string; equity: number; return_pct: number }>; sessions: AgentSession[] };
+export type Study = { status: "missing"; plans: [] } | { status: "partial" | "complete"; start: string; end: string; model: string;
+  completed_days: number; planned_days: number; evaluated_days: number; assumptions: string[]; plans: Plan[];
+  context_coverage: Record<string, { technical: number; option_chain: number; fundamentals: number; news: number }> };
+
+export interface FrozenContext {
+  trade_date: string;
+  daily_data_date: string;
+  ownership: string;
+  products: Record<string, {
+    technical: null | { contract: string; close: number; volume: number; open_interest: number;
+      change5_pct: number | null; realized_vol20_ann_pct: number | null };
+    options: Array<{ id: string; premium: number; volume: number }>;
+    monthly_aggregate: Record<string, { month: string; month_end_open_interest: number; volume_lots: number }>;
+  }>;
+  documents: Array<{ id: string; products: string[]; dimension: string; scope: string;
+    title: string; excerpt: string; url: string; publisher: string; available_at: string; sha256?: string; freshness_role?: string }>;
 }

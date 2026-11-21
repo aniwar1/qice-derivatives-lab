@@ -154,6 +154,15 @@ def strategy_payload(
                 "why_not_opposite": "反向缺少新增持仓与结构共振。",
                 "strongest_counterevidence": "夜盘尚未收盘，结构仍可能回落。",
             },
+            "agent_review": {
+                "technical": {"assessment": "技术结构待判断", "source_ids": []},
+                "fundamentals": {"assessment": "未获取新的供需证据", "source_ids": []},
+                "news": {"assessment": "未识别已披露的重要催化", "source_ids": []},
+                "positioning": {"classification": "unknown", "assessment": "归属未知"},
+                "plans": [{"strategy": key, "action": "wait", "reason": "等待证据", "quantity": 0,
+                           "max_holding_days": 0, "legs": [], "event_source_id": None,
+                           "event_at": None, "invalidation": "出现新证据后复核"} for key in "ABC"],
+            },
             "technical_structure": domain,
             "fundamentals_news": domain,
             "member_flow": domain,
@@ -176,7 +185,7 @@ def strategy_payload(
 
 class FakeGateway:
     def __init__(self, payload: AgentStrategyPayload | None = None) -> None:
-        self.payload = payload or strategy_payload()
+        self.payload = payload or strategy_payload(decision="wait")
         self.calls: list[str] = []
         self.workspace_roots: list[Path | None] = []
         self.release = None

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from uuid import uuid4
@@ -12,6 +13,10 @@ from .config import Settings
 from .dashboard import DashboardProjector, DomainSnapshotProvider, public_run_view
 from .db import StrategyStore
 from .freshness import LatestStrategyResolution, resolve_latest_strategy
+from .live_options import collect_option_books
+from .live_review import validate_agent_review, bind_public_domains
+from .member_positions import collect_member_positions
+from .agent_sources import collect_agent_sources
 from .models import AgentStrategyPayload, LatestStrategyRecord, StrategyRunAccepted, StrategyRunRequest
 from .prompting import build_strategy_prompt
 from .opportunities import compare_opportunities, compile_opportunities
@@ -135,15 +140,44 @@ class StrategyService:
                 ) from exc
             capture: ResearchCapture | None = None
             archive_digest: str | None = None
+            expected = (request.product,) if request.product else allowed_products
+            sources = {"items": [], "source_status": {}, "gaps": ["本轮未启用市场取证"]}
+            options = {"books": [], "gaps": {}}
+            positions = {"items": [], "gaps": {}}
+            specs = {}
             if self.settings.capture_market_evidence:
-                expected = (request.product,) if request.product else allowed_products
-                capture, artifacts = await capture_market(codex_workspace, run_id, request, expected)
+                market, sources = await asyncio.gather(
+                    capture_market(codex_workspace, run_id, request, expected),
+                    asyncio.to_thread(collect_agent_sources, list(expected),
+                                      archive_root=self.settings.workspace_root / "local-data" / "agent-sources"),
+                )
+                capture, artifacts = market
+                positions, member_originals = await asyncio.to_thread(collect_member_positions, capture.observations)
+                artifacts.update(member_originals)
+                if request.option_analysis_requested:
+                    options, option_originals = await asyncio.to_thread(collect_option_books, capture.observations)
+                    artifacts.update(option_originals)
+                with (self.settings.workspace_root / "config" / "product_contract_specs.json").open(encoding="utf-8") as stream:
+                    specs = {item["symbol"]: item["multiplier"] for item in json.load(stream)["products"]}
+            decision_clock = datetime.now(tz=BJT)
+            context = {
+                "version": "agent_review.v2", "cutoff": decision_clock.isoformat(),
+                "sources": sources, "options": options, "member_positions": positions, "multipliers": specs,
+                "paper_equity_reference": 200000, "entry_budget": 2000, "fee_per_leg": 3,
+                "technical": [{key: value for key, value in row.model_dump(mode="json").items() if key != "daily_bars"}
+                              for row in capture.observations] if capture else [],
+            }
+            if capture:
+                capture = capture.model_copy(update={"agent_context": context})
                 archive_digest = await asyncio.to_thread(self.research_archive.save, capture, artifacts)
                 await self.store.append_event(
-                    run_id, stage="evidence", message=f"已冻结 {len(capture.observations)} 条行情证据，{len(capture.gaps)} 个品种存在缺口。",
+                    run_id, stage="evidence",
+                    message=f"已冻结 {len(capture.observations)} 条行情、{len(sources['items'])} 条权威资料及 {len(options['books'])} 条期权盘口。",
                     payload={"research_archive_sha256": archive_digest},
                 )
-            decision_clock = datetime.now(tz=BJT)
+            (codex_workspace.run_dir / "agent-context.json").write_text(
+                json.dumps(context, ensure_ascii=False), encoding="utf-8"
+            )
             prompt = build_strategy_prompt(
                 request,
                 run_id=run_id,
@@ -207,7 +241,18 @@ class StrategyService:
             validated_payload = AgentStrategyPayload.model_validate(
                 gateway_result.payload.model_dump(mode="python")
             )
-            self._validate_result(validated_payload, request, allowed_products)
+            observations = capture.observations if capture else []
+
+            def check_review(item: AgentStrategyPayload, scope: StrategyRunRequest) -> AgentStrategyPayload:
+                self._validate_result(item, scope, allowed_products)
+                validate_agent_review(item, context, observations)
+                if (not scope.option_analysis_requested and item.agent_review
+                    and any(plan.action == "paper_entry" for plan in item.agent_review.plans)):
+                    raise StrategyValidationError("本次研究未请求期权计划")
+
+                return bind_public_domains(item, context, observations)
+
+            validated_payload = check_review(validated_payload, request)
             record = LatestStrategyRecord(
                 run_id=run_id,
                 updated_at=datetime.now(tz=BJT),
@@ -217,7 +262,7 @@ class StrategyService:
             record_payload = record.model_dump(mode="json")
             opportunities = compile_opportunities(
                 validated_payload, request, capture, codex_workspace.run_dir,
-                lambda item, scope: self._validate_result(item, scope, allowed_products),
+                check_review,
             )
             await self.store.complete_run(run_id, record_payload, research={
                 "mode": request.mode, "product": request.product,
@@ -375,6 +420,9 @@ class StrategyService:
             raise StrategyValidationError("strategy product differs from requested product")
         if request.requested_contract and result.analysis_contract != request.requested_contract:
             raise StrategyValidationError("analysis contract differs from requested contract")
+        has_entry = result.decision != "wait" or bool(
+            result.agent_review and any(plan.action == "paper_entry" for plan in result.agent_review.plans)
+        )
         if result.product:
             focus_rows = [item for item in result.scan_coverage.products if item.product == result.product]
             if len(focus_rows) != 1:
@@ -382,10 +430,10 @@ class StrategyService:
             focus = focus_rows[0]
             if result.actual_main_contract != focus.actual_main_contract:
                 raise StrategyValidationError("selected actual-main contract differs from scan row")
-            if result.decision != "wait" and focus.status == "unobservable":
+            if has_entry and focus.status == "unobservable":
                 raise StrategyValidationError("an unobservable scan row cannot support a capital action")
         if (
-            result.decision != "wait"
+            has_entry
             and request.requested_contract is None
             and result.analysis_contract != result.actual_main_contract
         ):
@@ -471,6 +519,7 @@ class StrategyService:
             "candidate_status": info["candidate_status"] if info else "unavailable",
             "excluded_count": info["excluded_count"] if info else 0,
             "opportunities": info["opportunities"] if info else [], "comparison": comparison,
+            "sleeve_plans": info.get("sleeve_plans", []) if info else [],
         }
 
     async def replay(self, run_id: str, cutoff: datetime) -> dict | None:
@@ -501,7 +550,9 @@ class StrategyService:
                 else:
                     try:
                         self._validate_result(strategy, run.request, tuple(publication["allowed_products"]), clock=strategy.as_of)
-                    except StrategyValidationError:
+                        if archive.agent_context:
+                            validate_agent_review(strategy, archive.agent_context, archive.observations)
+                    except (StrategyValidationError, ValueError):
                         checks = "failed"
                     else:
                         relevant = [row for row in visible if strategy.analysis_contract is None

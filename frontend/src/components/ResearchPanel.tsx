@@ -126,6 +126,19 @@ export function ResearchPanel({ revision, initialRunId }: { revision: number; in
               )}
             </details>
           )}
+          {current.run.result?.strategy.agent_review && <section className="research-section">
+            <h3>Agent 三面判断与策略计划</h3>
+            <dl className="plan-steps">{(["technical", "fundamentals", "news"] as const).map(key => {
+              const part = current.run.result!.strategy.agent_review![key];
+              return <div key={key}><dt>{{technical:"技术面", fundamentals:"基本面", news:"消息面"}[key]}</dt>
+                <dd>{part.assessment}</dd>{!!part.source_ids.length && <dd>引用 {part.source_ids.join("、")}</dd>}</div>;
+            })}</dl>
+            <p>持仓归属 · {current.run.result.strategy.agent_review.positioning.assessment}</p>
+            {current.run.result.strategy.agent_review.plans.map(plan => <details key={plan.strategy} className="table-details">
+              <summary>{plan.strategy} · {plan.action === "wait" ? "等待" : "模拟入场计划"}</summary><p>{plan.reason}</p>
+              {plan.action === "paper_entry" && <p>{plan.legs.join(" / ")} · {plan.quantity} 手 · 最长 {plan.max_holding_days} 个交易日</p>}
+              <p>失效条件 · {plan.invalidation}</p></details>)}
+          </section>}
           {current.archive ? (
             <details className="research-section">
               <summary>原始取证 · {current.archive.observations.length}/{current.archive.expected_products.length} 个品种有行情</summary>

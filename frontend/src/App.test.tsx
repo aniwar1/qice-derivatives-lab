@@ -6,6 +6,7 @@ import type { StrategyPlan, WorkbenchBacktest } from "./types";
 
 vi.mock("./lib/api", () => ({
   getDashboard: vi.fn(),
+  getAgentStudy: vi.fn().mockResolvedValue({ status: "missing", plans: [] }),
   getResearchRuns: vi.fn().mockResolvedValue([]),
   getWorkbenchBacktest: vi.fn(),
   getProductAnalysis: vi.fn(),
@@ -37,7 +38,7 @@ const dashboard = {
 describe("期策工作台", () => {
   afterEach(cleanup);
   beforeEach(() => {
-    window.history.replaceState(null, "", "/");
+    window.history.replaceState(null, "", "/#overview");
     window.scrollTo = vi.fn();
     vi.resetAllMocks();
     vi.mocked(getDashboard).mockResolvedValue(dashboard);

@@ -390,6 +390,57 @@ class BoundedQualityReview(StrictModel):
         return value.strip() if isinstance(value, str) else value
 
 
+class EvidenceAssessment(StrictModel):
+    assessment: str = Field(min_length=1, max_length=850)
+    source_ids: list[str] = Field(max_length=8)
+
+
+class OwnershipAssessment(StrictModel):
+    classification: Literal["unknown", "exchange_member_aggregate"]
+    source_ids: list[str] = Field(default_factory=list, max_length=2)
+    assessment: str = Field(min_length=1, max_length=400)
+
+
+class SleevePlan(StrictModel):
+    strategy: Literal["A", "B", "C"]
+    action: Literal["wait", "paper_entry"]
+    reason: str = Field(min_length=1, max_length=850)
+    quantity: int = Field(ge=0)
+    max_holding_days: int = Field(ge=0, le=5)
+    legs: list[str] = Field(max_length=2)
+    comparison_symbols: list[str] = Field(default_factory=list, max_length=4)
+    scenario_low: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    scenario_high: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    event_source_id: str | None
+    event_at: datetime | None
+    invalidation: str = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def check_plan(self) -> "SleevePlan":
+        if self.action == "wait":
+            if self.quantity != 0 or self.legs or self.max_holding_days:
+                raise ValueError("等待须为零仓位、零持有期且不包含建仓腿")
+        elif not self.quantity or not self.max_holding_days or len(self.legs) != (2 if self.strategy == "C" else 1):
+            raise ValueError("纸面计划的腿数、数量或期限无效")
+        if self.event_at is not None:
+            _aware(self.event_at, "event_at")
+        return self
+
+
+class AgentReview(StrictModel):
+    technical: EvidenceAssessment
+    fundamentals: EvidenceAssessment
+    news: EvidenceAssessment
+    positioning: OwnershipAssessment
+    plans: list[SleevePlan] = Field(min_length=3, max_length=3)
+
+    @model_validator(mode="after")
+    def check_strategies(self) -> "AgentReview":
+        if {plan.strategy for plan in self.plans} != {"A", "B", "C"}:
+            raise ValueError("每轮研究必须分别评估 A、B、C")
+        return self
+
+
 class AgentStrategyPayload(StrictModel):
     schema_version: Literal["codex_strategy_decision.v1"]
     as_of: datetime
@@ -413,6 +464,7 @@ class AgentStrategyPayload(StrictModel):
     session_daily_bar: SessionDailyBar | None
     market_levels: MarketLevels
     rationale: StrategyRationale
+    agent_review: AgentReview | None = None
     technical_structure: EvidenceDomainSummary
     fundamentals_news: EvidenceDomainSummary
     member_flow: EvidenceDomainSummary

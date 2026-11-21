@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import math
 from typing import AsyncIterator
 from zoneinfo import ZoneInfo
@@ -23,6 +23,7 @@ from .db import ActiveRunConflict, StrategyStore
 from .models import StrategyRunAccepted, StrategyRunRequest, StrategyRunView
 from .service import InvalidStrategyScope, StrategyService
 from .sse import run_event_stream
+from . import study_view
 
 
 def create_app(
@@ -131,6 +132,39 @@ def create_app(
             "source_url": quote["source_url"],
         }
 
+    study_directory = configured.workspace_root / "local-data" / "agent-study" / study_view.BATCH
+
+    @app.get("/api/workbench/agent-replay")
+    async def agent_replay() -> dict:
+        try:
+            return await asyncio.to_thread(study_view.read_results, study_directory)
+        except (OSError, KeyError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="回测报告读取失败，请核对本地归档。") from exc
+
+    @app.get("/api/workbench/agent-replay/context/{day}")
+    async def agent_replay_context(day: date) -> dict:
+        try:
+            packet = await asyncio.to_thread(study_view.read_context, study_directory, day)
+        except (OSError, KeyError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="该日证据档案缺失或摘要不符。") from exc
+        if packet is None:
+            raise HTTPException(status_code=404, detail="该交易日尚无可回读的模型决策。")
+        return packet
+
+    @app.get("/api/workbench/agent-replay/context/{day}/source/{checksum}")
+    async def agent_replay_document(day: date, checksum: str) -> Response:
+        try:
+            document = await asyncio.to_thread(study_view.read_document, study_directory, day, checksum)
+        except (OSError, KeyError, ValueError) as exc:
+            raise HTTPException(status_code=409, detail="无法校验该日的归档原件。") from exc
+        if document is None:
+            raise HTTPException(status_code=404, detail="当日证据中没有这份原件。")
+        blob, extension = document
+        return Response(blob, media_type="application/octet-stream", headers={
+            "Content-Disposition": f'attachment; filename="{day}-{checksum[:12]}{extension}"',
+            "X-Content-Type-Options": "nosniff",
+        })
+
     @app.get("/api/workbench/backtest")
     async def workbench_backtest() -> dict:
         directory = configured.workspace_root / "local-data" / "backtests" / BATCH
@@ -179,8 +213,8 @@ def create_app(
             raise HTTPException(status_code=409, detail="行情原件未通过完整性校验。") from exc
         if blob is None:
             raise HTTPException(status_code=404, detail="本轮没有该行情原件。")
-        return Response(blob, media_type="application/json", headers={
-            "Content-Disposition": 'attachment; filename="market-evidence.json"',
+        return Response(blob, media_type="application/octet-stream", headers={
+            "Content-Disposition": f'attachment; filename="evidence-{digest[:12]}.bin"',
             "X-Content-Type-Options": "nosniff",
         })
 

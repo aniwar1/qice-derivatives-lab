@@ -19,6 +19,7 @@
     "session_daily_bar",
     "market_levels",
     "rationale",
+    "agent_review",
     "technical_structure",
     "fundamentals_news",
     "member_flow",
@@ -58,6 +59,7 @@
     },
     "market_levels": {"$ref": "#/$defs/marketLevels"},
     "rationale": {"$ref": "#/$defs/rationale"},
+    "agent_review": {"$ref": "#/$defs/agentReview"},
     "technical_structure": {"$ref": "#/$defs/domain"},
     "fundamentals_news": {"$ref": "#/$defs/domain"},
     "member_flow": {"$ref": "#/$defs/domain"},
@@ -82,6 +84,38 @@
     "short_option_open_allowed": {"const": false}
   },
   "$defs": {
+    "agentReview": {
+      "type": "object", "additionalProperties": false,
+      "required": ["technical", "fundamentals", "news", "positioning", "plans"],
+      "properties": {
+        "technical": {"$ref": "#/$defs/assessment"},
+        "fundamentals": {"$ref": "#/$defs/assessment"},
+        "news": {"$ref": "#/$defs/assessment"},
+        "positioning": {
+          "type": "object", "additionalProperties": false, "required": ["classification", "assessment", "source_ids"],
+          "properties": {"classification": {"enum": ["unknown", "exchange_member_aggregate"]}, "source_ids": {"type": "array", "items": {"type": "string"}}, "assessment": {"$ref": "#/$defs/text"}}
+        },
+        "plans": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/sleevePlan"}}
+      }
+    },
+    "assessment": {
+      "type": "object", "additionalProperties": false, "required": ["assessment", "source_ids"],
+      "properties": {"assessment": {"$ref": "#/$defs/text"}, "source_ids": {"type": "array", "items": {"type": "string"}}}
+    },
+    "sleevePlan": {
+      "type": "object", "additionalProperties": false,
+      "required": ["strategy", "action", "reason", "quantity", "max_holding_days", "legs", "comparison_symbols", "scenario_low", "scenario_high", "event_source_id", "event_at", "invalidation"],
+      "properties": {
+        "strategy": {"enum": ["A", "B", "C"]}, "action": {"enum": ["wait", "paper_entry"]},
+        "reason": {"$ref": "#/$defs/text"}, "quantity": {"type": "integer", "minimum": 0},
+        "max_holding_days": {"type": "integer", "minimum": 0, "maximum": 5},
+        "legs": {"type": "array", "items": {"type": "string"}, "maxItems": 2},
+        "comparison_symbols": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
+        "scenario_low": {"type": ["number", "null"]}, "scenario_high": {"type": ["number", "null"]},
+        "event_source_id": {"type": ["string", "null"]}, "event_at": {"type": ["string", "null"], "format": "date-time"},
+        "invalidation": {"$ref": "#/$defs/text"}
+      }
+    },
     "timestamp": {"type": "string", "format": "date-time", "minLength": 20},
     "text": {"type": "string", "minLength": 1, "maxLength": 1600},
     "product": {"type": "string", "pattern": "^[A-Z]{1,3}$"},

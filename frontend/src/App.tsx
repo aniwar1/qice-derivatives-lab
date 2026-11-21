@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AgentStudy } from "./components/AgentStudy";
 import { AsyncState } from "./components/AsyncState";
 import { DecisionRail } from "./components/DecisionRail";
 import { HelpTip } from "./components/HelpTip";
@@ -10,11 +11,12 @@ import { directionLabel, formatTimestamp, humanStatus, normalizeDashboard } from
 import type { DashboardView, RunEvent, StrategyPlan, StrategyRunAccepted, WorkbenchBacktest } from "./types";
 
 type LoadState = "loading" | "ready" | "error";
-type Route = { page: "overview" | "plans" | "products" | "archive"; id?: string; day?: string };
+type Route = { page: "agent" | "overview" | "plans" | "products" | "archive"; id?: string; day?: string };
 
 const pages = [
-  { page: "overview", label: "策略总览" },
-  { page: "plans", label: "策略计划" },
+  { page: "agent", label: "Agent 策略回测" },
+  { page: "overview", label: "十月回测基线" },
+  { page: "plans", label: "十月基线计划" },
   { page: "products", label: "品种研究" },
   { page: "archive", label: "研究档案" },
 ] as const;
@@ -25,7 +27,7 @@ function readRoute(): Route {
   if (page === "products" || page === "archive") {
     return { page, id: /^[A-Za-z0-9_-]+$/.test(id ?? "") ? id : undefined };
   }
-  return { page: "overview" };
+  return { page: page === "overview" ? "overview" : "agent" };
 }
 
 function App() {
@@ -241,7 +243,7 @@ function App() {
         document.getElementById("workspace-main")?.focus();
       }}>跳到主内容</a>
       <aside className="workspace-sidebar">
-        <a href="#overview" className="workspace-brand"><span className="brand-monogram" aria-hidden="true">期</span><span><strong>期策</strong><small>衍生品研究工作台</small></span></a>
+        <a href="#agent" className="workspace-brand"><span className="brand-monogram" aria-hidden="true">期</span><span><strong>期策</strong><small>衍生品研究工作台</small></span></a>
         <nav aria-label="工作台导航">{pages.map((item) => (
           <a key={item.page} href={`#${item.page}`} aria-current={route.page === item.page ? "page" : undefined}>{item.label}</a>
         ))}</nav>
@@ -256,6 +258,7 @@ function App() {
           {error && <div className="alert workspace-alert" role="alert"><span>{error}</span><button className="text-action" onClick={() => void load()}>重新连接</button></div>}
           {dashboard?.codexState === "authentication_required" && <p className="alert">启动研究前，请在终端运行 <code>codex login</code>，然后重新加载页面。</p>}
           {runMessage && <div className="workspace-run" role="status"><span>{runMessage}</span>{finishedRunId ? <button className="text-action" onClick={() => openArchive(finishedRunId)}>查看本次研究 →</button> : <HelpTip label="解释研究进度">实时连接中断时，工作台会继续查询本地服务中的任务状态。</HelpTip>}</div>}
+          {route.page === "agent" && <AgentStudy namesByProduct={Object.fromEntries(products.map(p => [p.symbol, p.name]))} />}
           {route.page === "overview" && <StrategyOverview data={backtest} error={backtestError} openPlan={openPlan} />}
           {route.page === "plans" && <>
             {backtestError && <p className="alert" role="alert">{backtestError}</p>}
