@@ -390,6 +390,16 @@ class StrategyStore:
             ).mappings().first()
         return self._run_mapping(row) if row else None
 
+    async def latest_product_strategy(self, product: str) -> dict[str, Any] | None:
+        async with self.engine.connect() as connection:
+            row = (await connection.execute(
+                select(strategy_runs).where(
+                    strategy_runs.c.status == "completed",
+                    strategy_runs.c.result["strategy"]["product"].as_string() == product,
+                ).order_by(desc(strategy_runs.c.completed_at), desc(strategy_runs.c.created_at)).limit(1)
+            )).mappings().first()
+        return self._run_mapping(row) if row else None
+
     async def list_recent_runs(self, limit: int) -> list[dict[str, Any]]:
         async with self.engine.connect() as connection:
             rows = (await connection.execute(

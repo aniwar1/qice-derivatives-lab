@@ -102,6 +102,15 @@ async def test_market_batch_persists_multiple_candidates_and_replays_frozen_evid
             assert sha256(raw.content).hexdigest() == digest
             assert not gateway.workspace_roots[0].exists()
 
+            product = (await client.get("/api/workbench/products/jm")).json()
+            assert product["observation"]["contract"] == "JM2701"
+            assert product["evidence_run_id"] == run_id
+            assert product["analysis"]["result"]["strategy"]["product"] == "JM"
+            other = (await client.get("/api/workbench/products/M")).json()
+            assert other["observation"]["contract"] == "M2701"
+            assert other["analysis"] is None
+            assert (await client.get("/api/workbench/products/ABSENT")).status_code == 404
+
             past = primary.as_of - timedelta(minutes=1, seconds=30)
             historical = (await client.get(f"{base}/replay", params={"at": past.isoformat()})).json()
             assert historical["validation"] == "not_published"

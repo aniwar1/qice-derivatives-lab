@@ -15,8 +15,10 @@ from fastapi.staticfiles import StaticFiles
 import requests
 
 from . import __version__
+from .backtest_view import BATCH, BacktestIntegrityError, read_backtest
 from .codex_gateway import CodexGateway, LocalCodexGateway
 from .config import Settings
+from .dashboard import public_run_view
 from .db import ActiveRunConflict, StrategyStore
 from .models import StrategyRunAccepted, StrategyRunRequest, StrategyRunView
 from .service import InvalidStrategyScope, StrategyService
@@ -127,6 +129,30 @@ def create_app(
             "price": quote["price"],
             "observed_at": observed.replace(tzinfo=ZoneInfo("Asia/Shanghai")).isoformat(),
             "source_url": quote["source_url"],
+        }
+
+    @app.get("/api/workbench/backtest")
+    async def workbench_backtest() -> dict:
+        directory = configured.workspace_root / "local-data" / "backtests" / BATCH
+        try:
+            return await asyncio.to_thread(read_backtest, directory)
+        except BacktestIntegrityError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/api/workbench/products/{product}")
+    async def workbench_product(product: str) -> dict:
+        symbol = product.upper()
+        if symbol not in service.domain.allowed_products():
+            raise HTTPException(status_code=404, detail="该品种不在研究范围内。")
+        sample, strategy = await asyncio.gather(
+            asyncio.to_thread(service.research_archive.latest_for_product, symbol),
+            repository.latest_product_strategy(symbol),
+        )
+        return {
+            "product": symbol,
+            "observation": sample[1] if sample else None,
+            "evidence_run_id": sample[0] if sample else None,
+            "analysis": public_run_view(strategy) if strategy else None,
         }
 
     @app.get("/api/research/runs")

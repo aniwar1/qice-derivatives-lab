@@ -194,3 +194,86 @@ export interface ResearchReplay {
   followup_truncated: boolean;
   invalidation_observed: ResearchObservation | null;
 }
+
+export interface BacktestPoint {
+  day: string;
+  equity: number;
+  return_pct: number;
+  realized: number;
+  open_pnl: number;
+  open_positions: number;
+}
+
+export interface BacktestSession {
+  day: string;
+  information_day: string;
+  outcome: {
+    status: string;
+    reason: string | null;
+    product?: string;
+    contract?: string;
+    direction?: string | null;
+    decision?: string;
+    candidate_count?: number;
+    quantity?: number;
+    paid?: number;
+    fee?: number;
+    reference?: number;
+    event?: { title: string; release_bjt: string; preannounced_source: string; transmission: string };
+    legs?: Array<{ symbol: string; open_price: number }>;
+  };
+  exits: Array<{ trade_id: string; net_pnl: number; reason: string }>;
+}
+
+export interface StrategyPlan {
+  id: "A" | "B" | "C";
+  name: string;
+  style: string;
+  thesis: string;
+  steps: [string, string][];
+  limit: string;
+  curve?: BacktestPoint[];
+  sessions?: BacktestSession[];
+  stats?: {
+    opened: number; closed: number; open_positions: number; equity: number;
+    return_pct: number; drawdown_pct: number; realized: number; open_pnl: number;
+  };
+}
+
+export type WorkbenchBacktest =
+  | { status: "missing"; batch: string; plans: StrategyPlan[] }
+  | { status: "ready"; batch: string; plans: StrategyPlan[]; days: string[]; initial_cash: number;
+      daily_cap: number; fee_per_side: number; covered_products: string[]; configured_count: number; market_sha256: string };
+
+export interface ProductEvidence {
+  status: string;
+  freshness: string;
+  conclusion: string;
+  sources: Array<{ url: string; title: string; retrieved_at: string; locator: string }>;
+}
+
+export interface ProductAnalysis {
+  product: string;
+  observation: ResearchObservation | null;
+  evidence_run_id: string | null;
+  analysis: {
+    run_id: string;
+    result: {
+      strategy: {
+        analysis_contract: string | null;
+        as_of: string;
+        decision: string;
+        reassess_by: string;
+        evidence_gaps: string[];
+        technical_structure: ProductEvidence;
+        fundamentals_news: ProductEvidence;
+        member_flow: ProductEvidence;
+        option_market: ProductEvidence;
+        rationale: { thesis: string; strongest_counterevidence: string };
+        market_levels: { trigger?: number | null; target?: number | null; invalidation?: number | null };
+        session_daily_bar: { bar_state: string; as_of: string } | null;
+        quality_review: { strongest_challenge: string; resolution: string };
+      };
+    } | null;
+  } | null;
+}

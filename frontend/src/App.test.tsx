@@ -1,156 +1,111 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { createStrategyRun, getDashboard, getStrategyRun, subscribeToRun } from "./lib/api";
+import { createStrategyRun, getDashboard, getProductAnalysis, getStrategyRun, getWorkbenchBacktest, subscribeToRun } from "./lib/api";
+import type { StrategyPlan, WorkbenchBacktest } from "./types";
 
 vi.mock("./lib/api", () => ({
   getDashboard: vi.fn(),
   getResearchRuns: vi.fn().mockResolvedValue([]),
+  getWorkbenchBacktest: vi.fn(),
+  getProductAnalysis: vi.fn(),
   getStrategyRun: vi.fn(),
   createStrategyRun: vi.fn(),
   subscribeToRun: vi.fn(),
 }));
 
-const dashboardFixture = {
-  generated_at: "2026-09-14T23:05:00+08:00",
-  latest_strategy: {
-    product: "RU",
-    contract: "RU2701",
-    action: "long",
-    path: "夜盘结构走强，等待价格触发。",
-    trigger: 16000,
-    target: 16600,
-    invalidation: 15740,
-    why_now: "波动收敛后资金重新流入。",
-  },
-  evidence: [
-    {
-      domain: "technical_structure",
-      availability: "partial",
-      freshness: "fresh",
-      integrity: "verified",
-      facts: {
-        session_daily_bar: {
-          bar_state: "session_partial",
-          as_of: "2026-09-14T23:05:00+08:00",
-          coverage: {
-            session_kind: "night",
-            schedule_group: "23:00",
-            checkpoint_at: "2026-09-14T23:00:00+08:00",
-            observed_through: "2026-09-14T23:00:00+08:00",
-          },
-          source: { kind: "url", locator: "https://example.com/RU2701" },
-          calendar_evidence: {
-            exchange: "SHFE",
-            trade_date: "2026-09-15",
-            regular_session_confirmed: true,
-            url: "https://www.shfe.com.cn/services/tradingdata/calendar/",
-            retrieved_at: "2026-09-14T23:04:00+08:00",
-            locator: "2026-09-15 常规交易日",
-          },
-        },
-      },
-    },
-  ],
-  architecture: {
-    nodes: [
-      { id: "agent_hypothesis", label: "主假设", owner: "agent", status: "complete", summary: "选择一个可证伪假设。" },
-    ],
-    edges: [],
-  },
-  universe: { product_count: 22 },
+const day = "2026-10-30";
+const planFixture = (id: StrategyPlan["id"], name: string): StrategyPlan => ({
+  id, name, style: "模拟组合", thesis: "研究假设", steps: [["候选排序", "前一交易日冻结证据"]], limit: "样本限制",
+  stats: { opened: 1, closed: 0, open_positions: 1, equity: 101000, return_pct: 1, drawdown_pct: 2, realized: 0, open_pnl: 1000 },
+  curve: [{ day, equity: 101000, return_pct: 1, realized: 0, open_pnl: 1000, open_positions: 1 }],
+  sessions: [{ day, information_day: "2026-10-29", exits: [], outcome: {
+    status: "opened", reason: null, product: "JD", contract: "JD2701", quantity: 1,
+    paid: 300, fee: 3, legs: [{ symbol: "JD2701-C-4000", open_price: 30 }],
+  } }],
+});
+const backtest: WorkbenchBacktest = {
+  status: "ready", batch: "2026-10", days: [day], initial_cash: 100000, daily_cap: 10000, fee_per_side: 3,
+  covered_products: ["JD", "RU"], configured_count: 2, market_sha256: "",
+  plans: [planFixture("A", "多因子方向买权"), planFixture("B", "技术择强买权"), planFixture("C", "事件驱动宽跨式")],
+};
+const dashboard = {
+  product_catalog: [{ symbol: "JD", name: "鸡蛋", exchange: "DCE" }, { symbol: "RU", name: "天然橡胶", exchange: "SHFE" }],
   system: { status: "healthy" },
 };
 
-describe("App", () => {
+describe("期策工作台", () => {
+  afterEach(cleanup);
   beforeEach(() => {
-    vi.mocked(getDashboard).mockReset();
-    vi.mocked(getStrategyRun).mockReset();
-    vi.mocked(createStrategyRun).mockReset();
-    vi.mocked(subscribeToRun).mockReset();
+    window.history.replaceState(null, "", "/");
+    window.scrollTo = vi.fn();
+    vi.resetAllMocks();
+    vi.mocked(getDashboard).mockResolvedValue(dashboard);
+    vi.mocked(getWorkbenchBacktest).mockResolvedValue(backtest);
+    vi.mocked(getProductAnalysis).mockImplementation(async (product) => ({
+      product, observation: null, evidence_run_id: null, analysis: null,
+    }));
     vi.mocked(getStrategyRun).mockResolvedValue({ run_id: "test-run", status: "running" });
     vi.mocked(subscribeToRun).mockReturnValue(vi.fn());
   });
 
-  it("puts the latest strategy first and labels an in-session daily bar", async () => {
-    vi.mocked(getDashboard).mockResolvedValue(dashboardFixture);
+  it("并列展示三套计划并从曲线下钻到期权腿", async () => {
     render(<App />);
-
-    expect(await screen.findByRole("heading", { name: /RU\s*偏多/ })).toBeInTheDocument();
-    expect(screen.getByText("夜盘收盘后部分日线")).toBeInTheDocument();
-    expect(screen.getByText("夜盘结构走强，等待价格触发。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "更新最新策略" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "解释日线状态" })).toHaveAccessibleDescription(
-      expect.stringContaining("交易日历=交易所=SHFE"),
-    );
+    expect(await screen.findByRole("heading", { name: "多因子方向买权" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "技术择强买权" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "事件驱动宽跨式" })).toBeVisible();
+    const chart = within(screen.getByRole("region", { name: "组合收益曲线" }));
+    fireEvent.click(chart.getByRole("button", { name: "权益" }));
+    expect(chart.getByRole("button", { name: "权益" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getAllByRole("button", { name: "查看详细计划" })[2]);
+    expect(await screen.findByRole("heading", { name: "策略计划" })).toBeVisible();
+    expect(screen.getByText("JD2701-C-4000")).toBeVisible();
+    expect(screen.getByText(/信息截止 2026-10-29/)).toBeVisible();
   });
 
-  it("offers a recovery action when the local API is unavailable", async () => {
+  it("品种搜索切换专属观察项且保留搜索词", async () => {
+    window.history.replaceState(null, "", "/#products/JD");
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "鸡蛋" })).toBeVisible();
+    expect(screen.getByText(/在产蛋鸡存栏/)).toBeVisible();
+    const search = screen.getByRole("textbox", { name: /品种/ });
+    fireEvent.change(search, { target: { value: "RU" } });
+    fireEvent.click(screen.getByRole("button", { name: /天然橡胶/ }));
+    expect(await screen.findByRole("heading", { name: "天然橡胶" })).toBeVisible();
+    expect(screen.getByText(/主产区割胶天气/)).toBeVisible();
+    expect(screen.queryByText(/在产蛋鸡存栏/)).toBeNull();
+    expect(search).toHaveValue("RU");
+    await waitFor(() => expect(getProductAnalysis).toHaveBeenCalledWith("RU", expect.any(AbortSignal)));
+  });
+
+  it("本地服务不可用时仍展示回测并提供重连", async () => {
     vi.mocked(getDashboard).mockRejectedValue(new Error("连接被拒绝"));
     render(<App />);
-
-    expect(await screen.findByRole("heading", { name: "暂时无法读取策略" })).toBeInTheDocument();
-    expect(screen.getByText("连接被拒绝")).toBeInTheDocument();
+    expect(await screen.findByText("连接被拒绝")).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "组合收益曲线" })).toBeVisible();
     expect(screen.getByRole("button", { name: "重新连接" })).toBeEnabled();
   });
 
-  it("reattaches to an automatically started backend run", async () => {
-    vi.mocked(getDashboard).mockResolvedValue({
-      ...dashboardFixture,
-      latest_strategy: null,
-      active_run: { run_id: "auto-run-1", status: "running" },
-    });
+  it("重新接续服务已启动的研究", async () => {
+    vi.mocked(getDashboard).mockResolvedValue({ ...dashboard, active_run: { run_id: "auto-run-1", status: "running" } });
     render(<App />);
-
-    expect(await screen.findByRole("button", { name: "策略更新中…" })).toBeDisabled();
-    expect(screen.getAllByText("Codex 正在更新策略")).not.toHaveLength(0);
-    expect(vi.mocked(subscribeToRun)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        run_id: "auto-run-1",
-        events_url: "/api/runs/auto-run-1/events",
-      }),
-      expect.any(Function),
-      expect.any(Function),
+    expect(await screen.findByText("Codex 正在更新策略")).toBeVisible();
+    expect(screen.getByRole("button", { name: "运行全市场研究" })).toBeDisabled();
+    expect(subscribeToRun).toHaveBeenCalledWith(
+      expect.objectContaining({ run_id: "auto-run-1", events_url: "/api/runs/auto-run-1/events" }),
+      expect.any(Function), expect.any(Function),
     );
   });
 
-  it("keeps a legacy stale snapshot explainable until manual refresh", async () => {
-    vi.mocked(getDashboard).mockResolvedValue({
-      ...dashboardFixture,
-      latest_strategy: null,
-      latest_strategy_status: {
-        state: "stale",
-        reason: "session_partial_daily_close_elapsed",
-      },
-    });
+  it("单品种研究传入选中代码并通过轮询收口", async () => {
+    window.history.replaceState(null, "", "/#products/RU");
+    vi.mocked(createStrategyRun).mockResolvedValue({ run_id: "manual-run-1", status: "queued", events_url: "/api/runs/manual-run-1/events" });
+    vi.mocked(getStrategyRun).mockResolvedValue({ run_id: "manual-run-1", status: "completed" });
     render(<App />);
-
-    expect(await screen.findByRole("heading", { name: "等待手动更新" })).toBeInTheDocument();
-    expect(screen.getByText("上一版策略不会自动隐藏；需要新证据时，点击右上角按钮手动更新。")).toBeInTheDocument();
-  });
-
-  it("uses the task-status poll to finish when the progress stream has no terminal event", async () => {
-    vi.mocked(getDashboard).mockResolvedValue(dashboardFixture);
-    vi.mocked(createStrategyRun).mockResolvedValue({
-      run_id: "manual-run-1",
-      status: "queued",
-      events_url: "/api/runs/manual-run-1/events",
-    });
-    vi.mocked(getStrategyRun).mockResolvedValue({
-      run_id: "manual-run-1",
-      status: "completed",
-      result: null,
-    });
-    render(<App />);
-
-    const updateButtons = await screen.findAllByRole("button", { name: "更新最新策略" });
-    const update = updateButtons[updateButtons.length - 1];
-    fireEvent.click(update);
-
-    await waitFor(() =>
-      expect(vi.mocked(createStrategyRun)).toHaveBeenCalledOnce(),
-    );
-    await waitFor(() => expect(vi.mocked(getStrategyRun)).toHaveBeenCalledWith("manual-run-1"));
-    expect(vi.mocked(getStrategyRun)).toHaveBeenCalledWith("manual-run-1");
+    fireEvent.click(await screen.findByRole("button", { name: "运行单品种分析" }));
+    expect(createStrategyRun).toHaveBeenCalledWith({ mode: "single_analysis", product: "RU", option_analysis_requested: true });
+    expect(await screen.findByText("策略已更新")).toBeVisible();
+    expect(getStrategyRun).toHaveBeenCalledWith("manual-run-1");
+    expect(screen.getByRole("button", { name: "运行单品种分析" })).toBeEnabled();
   });
 });

@@ -48,9 +48,9 @@ function ObservationList({ observations, runId }: { observations: ResearchObserv
   );
 }
 
-export function ResearchPanel({ revision }: { revision: number }) {
+export function ResearchPanel({ revision, initialRunId }: { revision: number; initialRunId?: string }) {
   const [runs, setRuns] = useState<ResearchRun[]>([]);
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(initialRunId ?? "");
   const [detail, setDetail] = useState<ResearchDetail | null>(null);
   const [replay, setReplay] = useState<ResearchReplay | null>(null);
   const [cutoff, setCutoff] = useState("");
@@ -63,7 +63,7 @@ export function ResearchPanel({ revision }: { revision: number }) {
     void getResearchRuns(controller.signal).then((items) => {
       if (controller.signal.aborted) return;
       setRuns(items);
-      setSelected((current) => items.some((item) => item.run_id === current) ? current : (items[0]?.run_id ?? ""));
+      setSelected((current) => current || (items[0]?.run_id ?? ""));
     }).catch(() => { if (!controller.signal.aborted) setError("研究记录读取失败。"); });
     return () => controller.abort();
   }, [revision]);
@@ -105,6 +105,7 @@ export function ResearchPanel({ revision }: { revision: number }) {
       {!!runs.length && (
         <label className="research-control">研究记录
           <select value={selected} onChange={(event) => choose(event.target.value)}>
+            {selected && !runs.some((item) => item.run_id === selected) && <option value={selected}>指定研究记录</option>}
             {runs.map((item) => (
               <option key={item.run_id} value={item.run_id}>
                 {timeFormatter.format(new Date(item.created_at))} · {item.product ?? "全市场"} · {humanStatus(item.status)}

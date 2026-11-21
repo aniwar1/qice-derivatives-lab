@@ -159,6 +159,14 @@ class ResearchArchive:
             raise ValueError("归档行情原件未通过摘要校验")
         return row[0]
 
+    def latest_for_product(self, product: str) -> tuple[str, MarketObservation] | None:
+        with self.lock, self._connect() as db:
+            row = db.execute("""
+                SELECT run_id, body FROM observations WHERE product = ?
+                ORDER BY available_at DESC, observed_at DESC, run_id DESC LIMIT 1
+            """, [product]).fetchone()
+        return (row[0], MarketObservation.model_validate_json(row[1])) if row else None
+
     def followup(self, contract: str, start: datetime, cutoff: datetime) -> list[MarketObservation]:
         with self.lock, self._connect() as db:
             rows = db.execute("""

@@ -4,6 +4,8 @@ import type {
   ResearchReplay,
   ResearchRun,
   MarketQuote,
+  ProductAnalysis,
+  WorkbenchBacktest,
   StrategyRunAccepted,
   StrategyRunRequest,
   StrategyRunView,
@@ -109,3 +111,9 @@ export const getResearchReplay = async (runId: string, at: string, signal?: Abor
   const query = at ? `?${new URLSearchParams({ at })}` : "";
   return readJson(await fetch(endpoint(`/api/research/runs/${encodeURIComponent(runId)}/replay${query}`), { signal }));
 };
+
+export const getWorkbenchBacktest = async (signal?: AbortSignal): Promise<WorkbenchBacktest> =>
+  readJson(await fetch(endpoint("/api/workbench/backtest"), { signal }));
+
+export const getProductAnalysis = async (product: string, signal?: AbortSignal): Promise<ProductAnalysis> =>
+  readJson(await fetch(endpoint(`/api/workbench/products/${encodeURIComponent(product)}`), { signal }));

@@ -1,52 +1,61 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AsyncState } from "./components/AsyncState";
 import { DecisionRail } from "./components/DecisionRail";
 import { HelpTip } from "./components/HelpTip";
+import { ProductWorkbench } from "./components/ProductWorkbench";
 import { ResearchPanel } from "./components/ResearchPanel";
-import { MarketCatalog } from "./components/MarketCatalog";
-import { createStrategyRun, getDashboard, getStrategyRun, subscribeToRun } from "./lib/api";
+import { StrategyOverview, StrategyPlans } from "./components/StrategyWorkbench";
+import { createStrategyRun, getDashboard, getStrategyRun, getWorkbenchBacktest, subscribeToRun } from "./lib/api";
 import { directionLabel, formatTimestamp, humanStatus, normalizeDashboard } from "./lib/model";
-import type { DashboardView, RunEvent, StrategyRunAccepted } from "./types";
+import type { DashboardView, RunEvent, StrategyPlan, StrategyRunAccepted, WorkbenchBacktest } from "./types";
 
 type LoadState = "loading" | "ready" | "error";
+type Route = { page: "overview" | "plans" | "products" | "archive"; id?: string; day?: string };
 
-const directionArrow: Record<string, string> = {
-  long: "↗",
-  short: "↘",
-  neutral: "→",
-  uncertain: "…",
-  wait: "Ⅱ",
-};
+const pages = [
+  { page: "overview", label: "策略总览" },
+  { page: "plans", label: "策略计划" },
+  { page: "products", label: "品种研究" },
+  { page: "archive", label: "研究档案" },
+] as const;
 
-const domainNames: Record<string, string> = {
-  market_contract: "合约身份",
-  technical_structure: "技术结构",
-  fundamentals_news: "基本面与新闻",
-  member_flow: "会员资金",
-  option_chain: "期权链",
-  account_position: "账户持仓",
-  realized_trade: "真实成交",
-};
-
-const optionActionLabel = (action: string): string => {
-  const labels: Record<string, string> = {
-    buy_to_open: "买入开仓",
-    wait: "等待",
-    hold: "持有",
-    close: "平仓",
-    not_selected: "不使用期权",
-  };
-  return labels[action] ?? action.replaceAll("_", " ");
-};
+function readRoute(): Route {
+  const [page, id, day] = window.location.hash.slice(1).split("/");
+  if (page === "plans") return { page, id: /^[ABC]$/.test(id ?? "") ? id : "A", day: /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day : undefined };
+  if (page === "products" || page === "archive") {
+    return { page, id: /^[A-Za-z0-9_-]+$/.test(id ?? "") ? id : undefined };
+  }
+  return { page: "overview" };
+}
 
 function App() {
+  const [route, setRoute] = useState(readRoute);
+  const [backtest, setBacktest] = useState<WorkbenchBacktest | null>(null);
+  const [backtestError, setBacktestError] = useState("");
+
+  useEffect(() => {
+    const change = () => {
+      setRoute(readRoute());
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", change);
+    return () => window.removeEventListener("hashchange", change);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getWorkbenchBacktest(controller.signal).then(setBacktest).catch((reason: Error) => {
+      if (!controller.signal.aborted) setBacktestError(reason.message || "回测载入失败。");
+    });
+    return () => controller.abort();
+  }, []);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [dashboard, setDashboard] = useState<DashboardView | null>(null);
   const [error, setError] = useState("");
   const [isRunning, setIsRunning] = useState(false);
   const [runMessage, setRunMessage] = useState("");
+  const [finishedRunId, setFinishedRunId] = useState<string | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
-  const [product, setProduct] = useState("");
   const [researchRevision, setResearchRevision] = useState(0);
   const closeStream = useRef<null | (() => void)>(null);
   const terminalRunId = useRef<string | null>(null);
@@ -91,6 +100,7 @@ function App() {
         setIsRunning(false);
         return;
       }
+      setFinishedRunId(runId ?? null);
       setRunMessage("策略已更新");
       setIsRunning(false);
       await load();
@@ -98,11 +108,12 @@ function App() {
     [load],
   );
 
-  const startRun = useCallback(async () => {
+  const startRun = useCallback(async (product = "") => {
     if (isRunning) return;
     setError("");
     setIsRunning(true);
     setRunMessage("正在提交手动更新");
+    setFinishedRunId(null);
     try {
       const accepted = await createStrategyRun({
         mode: product ? "single_analysis" : "all_market_scan",
@@ -118,7 +129,7 @@ function App() {
       setError(reason instanceof Error ? reason.message : "无法启动策略更新");
       if (!dashboard) setLoadState("error");
     }
-  }, [dashboard, isRunning, product]);
+  }, [dashboard, isRunning]);
 
   // A resident service may have started a run before the page connected.
   // Adopt that run and use the same tracking path as a manual click.
@@ -211,305 +222,60 @@ function App() {
     };
   }, [activeRunId, dashboard?.runId, dashboard?.runPhase, finishRun]);
 
-  const activeNodeId = useMemo(
-    () => dashboard?.nodes.find((node) => ["active", "in_progress", "blocked"].includes(node.status))?.id,
-    [dashboard],
-  );
 
-  const showLinkedPanel = useCallback((nodeId: string) => {
-    const targetByNode: Record<string, string> = {
-      intent_router: "latest-strategy",
-      scope_gate: "latest-strategy",
-      market_scan: "evidence-panel",
-      contract_binding: "strategy-panel",
-      evidence_fanout: "evidence-panel",
-      evidence_validation: "evidence-panel",
-      agent_hypothesis: "strategy-panel",
-      entry_path_comparison: "strategy-panel",
-      option_expression: "option-panel",
-      bounded_critic: "risk-panel",
-      final_validation: "strategy-panel",
-      position_lifecycle: "latest-strategy",
-      unified_dashboard: "latest-strategy",
-      learning_review: "risk-panel",
-    };
-    const element = document.getElementById(targetByNode[nodeId] ?? "latest-strategy");
-    if (!element) return;
-    element.scrollIntoView({ behavior: "smooth", block: "center" });
-    element.classList.remove("architecture-linked");
-    window.requestAnimationFrame(() => element.classList.add("architecture-linked"));
-    window.setTimeout(() => element.classList.remove("architecture-linked"), 900);
-  }, []);
-
-  if (loadState === "loading") return <AsyncState kind="loading" />;
-  if (loadState === "error" && !dashboard)
-    return <AsyncState kind="error" message={error} onAction={() => void load()} />;
-
-  const codexNeedsLogin = dashboard?.codexState === "authentication_required";
-  const header = (
-    <WorkbenchHeader
-      dashboard={dashboard}
-      isRunning={isRunning}
-      runMessage={runMessage}
-      product={product}
-      onSelectProduct={setProduct}
-      onUpdate={() => void startRun()}
-    />
-  );
-
-  if (!dashboard?.strategy) {
-    const manualRefreshDue = dashboard?.strategyState === "stale" || dashboard?.strategyState === "expired";
-    const invalid = dashboard?.strategyState === "invalid";
-    const unavailableTitle = manualRefreshDue ? "等待手动更新" : invalid ? "上一版策略已停止公开" : undefined;
-    const unavailableMessage = manualRefreshDue
-      ? "上一版策略不会自动隐藏；需要新证据时，点击右上角按钮手动更新。"
-      : invalid
-        ? "存量策略没有通过当前契约校验，请重新生成。"
-        : codexNeedsLogin
-          ? "可先浏览研究品种。生成策略前，请在终端运行 codex login，然后重新加载页面。"
-          : "选择研究范围，再手动生成第一版策略。";
-    return (
-      <div className="app-shell">
-        {header}
-        <div className="workbench">
-          {error && <div className="inline-error" role="alert">{error}</div>}
-          <AsyncState
-            kind="empty"
-            title={unavailableTitle}
-            message={isRunning ? runMessage || "Codex 正在生成第一版策略。" : unavailableMessage}
-            onAction={codexNeedsLogin ? undefined : () => void startRun()}
-            busy={isRunning}
-          />
-          <ResearchPanel revision={researchRevision} />
-          {!!dashboard?.products.length && <MarketCatalog products={dashboard.products} />}
-          {dashboard && <DecisionRail nodes={dashboard.nodes} activeId={activeNodeId} onNodeActivate={showLinkedPanel} />}
-        </div>
-      </div>
-    );
-  }
-
-  const { strategy, bar } = dashboard;
-  const partialBar = bar.state === "partial_night" || bar.state === "partial_day";
-
-  return (
-    <div className="app-shell">
-      <a className="skip-link" href="#latest-strategy">跳到最新策略</a>
-      {header}
-
-      <main className="workbench" id="latest-strategy">
-        {error && (
-          <div className="inline-error" role="alert">
-            <strong>更新未完成</strong>
-            <span>{error}</span>
-            <button type="button" onClick={() => void startRun()}>重试</button>
-          </div>
-        )}
-
-        {isRunning && (
-          <div className="run-progress" role="status" aria-live="polite">
-            <span className="run-progress__dot" aria-hidden="true" />
-            <span>{runMessage || "Codex 正在处理更新…"}</span>
-            <HelpTip label="解释更新状态">
-              更新由本地服务代为调用 Codex；实时事件中断时会自动查询任务状态，完成或失败都会解除等待。
-            </HelpTip>
-          </div>
-        )}
-
-        <section className={`strategy-focus direction-${strategy.direction}`} id="strategy-panel" aria-labelledby="strategy-title">
-          <div className="strategy-lead">
-            <div className="strategy-overline">
-              <span>最新策略</span>
-              <span className="freshness-stamp">{formatTimestamp(dashboard.generatedAt)}</span>
-              {(dashboard.strategyState === "stale" || dashboard.strategyState === "expired") && (
-                <span className="manual-refresh-badge">待手动更新</span>
-              )}
-              <HelpTip label="解释策略时间">看板时间表示策略快照生成时点，不等于成交时点。</HelpTip>
-              {(dashboard.strategyState === "stale" || dashboard.strategyState === "expired") && (
-                <HelpTip label="解释手动更新状态">
-                  这只是复核提醒，上一版策略仍保留在看板；只有你点击“更新最新策略”才会启动新的 Codex 取证。
-                </HelpTip>
-              )}
-            </div>
-
-            <div className="strategy-identity">
-              <span className="direction-mark" aria-hidden="true">{directionArrow[strategy.direction]}</span>
-              <div>
-                <h1 id="strategy-title">
-                  <span>{strategy.product}</span>
-                  <b>{directionLabel(strategy.direction)}</b>
-                </h1>
-                <div className="contract-line">
-                  <code>{strategy.contract}</code>
-                  {partialBar ? (
-                    <span className="bar-badge bar-badge--partial">
-                      {bar.state === "partial_night" ? "夜盘收盘后部分日线" : "日盘进行中部分日线"}
-                    </span>
-                  ) : bar.state === "completed" ? (
-                    <span className="bar-badge bar-badge--complete">完整日线</span>
-                  ) : null}
-                  {bar.state !== "unknown" && (
-                    <HelpTip label="解释日线状态">
-                      {partialBar
-                        ? `状态=${bar.rawState}。${bar.state === "partial_night" ? "常规夜盘已收盘、日盘尚未完成" : "日盘仍在进行"}；仅可用于提前候选或条件触发，不能当作完成日线或确认突破。时点=${formatTimestamp(bar.asOf)}；覆盖=${bar.coverage || "未披露"}；行情来源=${bar.source || "未披露"}；交易日历=${bar.calendarEvidence || "未披露"}。`
-                        : `状态=${bar.rawState}；时点=${formatTimestamp(bar.asOf)}；覆盖=${bar.coverage || "未披露"}；来源=${bar.source || "未披露"}。该日线已收盘，可用于完成态确认。`}
-                    </HelpTip>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {strategy.path && <p className="strategy-path">{strategy.path}</p>}
-            {(strategy.currentPrice !== "—" || strategy.support !== "—" || strategy.resistance !== "—") && (
-              <div className="market-anchors" aria-label="当前价格与关键位置">
-                <span>现价 <b>{strategy.currentPrice}</b></span>
-                <span>最强支撑 <b>{strategy.support}</b></span>
-                <span>最强压力 <b>{strategy.resistance}</b></span>
-                <HelpTip label="解释关键位置">每轮只保留一个最强支撑和一个最强压力；它们用于构造触发与失效，不构成自动交易指令。</HelpTip>
-              </div>
-            )}
-            {strategy.whyNow && (
-              <div className="why-now">
-                <span>为什么是现在</span>
-                <p>{strategy.whyNow}</p>
-              </div>
-            )}
-          </div>
-
-          <div className="strategy-levels" aria-label="交易结构">
-            <Level label="触发" value={strategy.trigger} tone="signal" help="条件满足才进入候选；页面不会自动下单。" />
-            <Level label="目标" value={strategy.target} tone="target" help="单一最强目标位或结构目标。" />
-            <Level label="失效" value={strategy.invalidation} tone="danger" help="标的结构失效条件；它与期权成交价止损分开。" />
-            <Level label="最晚兑现" value={formatTimestamp(strategy.deadline)} tone="muted" help="超过这一时点仍未兑现，应按时间失效重新评估。" />
-          </div>
-        </section>
-
-        <section className="option-strip" id="option-panel" aria-labelledby="option-title">
-          <div>
-            <span className="eyebrow">买方期权</span>
-            <h2 id="option-title">{optionActionLabel(strategy.optionAction)}</h2>
-          </div>
-          <div className="option-route">
-            <strong>{strategy.optionRoute ? strategy.optionRoute.replace("long_", "LONG ").toUpperCase() : "暂不表达"}</strong>
-            {strategy.optionContract && <code>{strategy.optionContract}</code>}
-          </div>
-          {strategy.optionReason ? (
-            <HelpTip label="解释期权表达">{strategy.optionReason}</HelpTip>
-          ) : (
-            <HelpTip label="解释期权表达">方向判断与期权是否值得买入分开；报价、IV、Theta 或流动性不合算时会等待。</HelpTip>
-          )}
-        </section>
-
-        <DecisionRail nodes={dashboard.nodes} activeId={activeNodeId} onNodeActivate={showLinkedPanel} />
-
-        <section className="evidence-section" id="evidence-panel" aria-labelledby="evidence-title">
-          <header className="section-heading">
-            <div>
-              <span className="eyebrow">决策底稿</span>
-              <h2 id="evidence-title">证据状态</h2>
-            </div>
-            <HelpTip label="解释证据状态">可用性、新鲜度和完整性分别校验；缺口会进入不确定性或触发等待，不参与投票。</HelpTip>
-          </header>
-
-          <div className="evidence-list">
-            {dashboard.evidence.length ? dashboard.evidence.map((item) => (
-              <div className="evidence-row" key={item.domain}>
-                <strong>{domainNames[item.domain] ?? item.domain}</strong>
-                <span className={`evidence-state state-${item.availability}`}>{humanStatus(item.availability)}</span>
-                <span className={`evidence-state state-${item.freshness}`}>{humanStatus(item.freshness)}</span>
-                <span className={`evidence-state state-${item.integrity}`}>{humanStatus(item.integrity)}</span>
-                {item.summary && <HelpTip label={`解释${domainNames[item.domain] ?? item.domain}`}>{item.summary}</HelpTip>}
-              </div>
-            )) : (
-              <div className="evidence-empty">
-                <span>本轮未返回证据明细</span>
-                <HelpTip label="解释证据空状态">策略可显示，但无法从看板复核证据维度；下一次更新会重新拉取。</HelpTip>
-              </div>
-            )}
-          </div>
-        </section>
-
-        {(strategy.counterevidence || strategy.falsifiers.length > 0) && (
-          <section className="risk-line" id="risk-panel" aria-label="反证与失效条件">
-            <strong>反证</strong>
-            <span>{strategy.counterevidence || strategy.falsifiers[0]}</span>
-            <HelpTip label="查看全部风险与可证伪条件">
-              {strategy.falsifiers.length ? strategy.falsifiers.join("；") : "暂无额外可证伪条件。"}
-            </HelpTip>
-          </section>
-        )}
-        <ResearchPanel revision={researchRevision} />
-        {!!dashboard.products.length && <MarketCatalog products={dashboard.products} />}
-      </main>
-    </div>
-  );
-}
-
-interface HeaderProps {
-  dashboard: DashboardView | null;
-  isRunning: boolean;
-  runMessage: string;
-  product: string;
-  onSelectProduct: (product: string) => void;
-  onUpdate: () => void;
-}
-
-function WorkbenchHeader({ dashboard, isRunning, runMessage, product, onSelectProduct, onUpdate }: HeaderProps) {
+  const openPlan = (id: StrategyPlan["id"], day?: string) => { window.location.hash = `plans/${id}${day ? `/${day}` : ""}`; };
+  const openProduct = (symbol: string) => { window.location.hash = `products/${symbol}`; };
+  const openArchive = (runId: string) => { window.location.hash = `archive/${runId}`; };
+  const canRun = !!dashboard && !isRunning && !activeRunId && dashboard.codexState !== "authentication_required";
+  const products = dashboard?.products ?? [];
+  const symbol = products.find((item) => item.symbol === route.id)?.symbol
+    ?? products.find((item) => item.symbol === "JD")?.symbol ?? products[0]?.symbol;
   const connected = dashboard?.systemState === "healthy" || dashboard?.systemState === "ready";
-  const codexNeedsLogin = dashboard?.codexState === "authentication_required";
+  const latest = dashboard?.strategy;
+  const activeNodeId = dashboard?.nodes.find((node) => ["active", "in_progress", "blocked"].includes(node.status))?.id;
+
   return (
-    <header className="topbar">
-      <div className="brand-lockup">
-        <span className="brand-symbol" aria-hidden="true"><i /><i /><i /></span>
-        <div>
-          <strong>期策</strong>
-          <span>LOCAL RESEARCH</span>
-        </div>
+    <div className="workspace-shell">
+      <a className="skip-link" href="#workspace-main" onClick={(event) => {
+        event.preventDefault();
+        document.getElementById("workspace-main")?.focus();
+      }}>跳到主内容</a>
+      <aside className="workspace-sidebar">
+        <a href="#overview" className="workspace-brand"><span className="brand-monogram" aria-hidden="true">期</span><span><strong>期策</strong><small>衍生品研究工作台</small></span></a>
+        <nav aria-label="工作台导航">{pages.map((item) => (
+          <a key={item.page} href={`#${item.page}`} aria-current={route.page === item.page ? "page" : undefined}>{item.label}</a>
+        ))}</nav>
+        <div className="workspace-connection"><i className={connected ? "connected" : ""} aria-hidden="true" />{connected ? "本地服务在线" : "本地服务状态未知"}</div>
+      </aside>
+      <div className="workspace-main">
+        <header className="workspace-toolbar">
+          <span>{products.length ? `中国商品期货 · ${products.length} 个研究品种` : "中国商品期货"}</span>
+          <button className="primary-action" type="button" disabled={!canRun} onClick={() => void startRun()}>运行全市场研究</button>
+        </header>
+        <main id="workspace-main" className="workspace-content" tabIndex={-1}>
+          {error && <div className="alert workspace-alert" role="alert"><span>{error}</span><button className="text-action" onClick={() => void load()}>重新连接</button></div>}
+          {dashboard?.codexState === "authentication_required" && <p className="alert">启动研究前，请在终端运行 <code>codex login</code>，然后重新加载页面。</p>}
+          {runMessage && <div className="workspace-run" role="status"><span>{runMessage}</span>{finishedRunId ? <button className="text-action" onClick={() => openArchive(finishedRunId)}>查看本次研究 →</button> : <HelpTip label="解释研究进度">实时连接中断时，工作台会继续查询本地服务中的任务状态。</HelpTip>}</div>}
+          {route.page === "overview" && <StrategyOverview data={backtest} error={backtestError} openPlan={openPlan} />}
+          {route.page === "plans" && <>
+            {backtestError && <p className="alert" role="alert">{backtestError}</p>}
+            <StrategyPlans key={`${route.id}/${route.day}`} data={backtest} id={route.id as StrategyPlan["id"]} initialDay={route.day} onSelect={openPlan} openProduct={openProduct} />
+          </>}
+          {route.page === "products" && (symbol
+            ? <ProductWorkbench products={products} symbol={symbol} choose={openProduct} openPlan={openPlan} openArchive={openArchive} backtest={backtest} revision={researchRevision} canRun={canRun} startResearch={(target) => void startRun(target)} />
+            : <AsyncState kind={loadState === "loading" ? "loading" : "empty"} title={loadState === "loading" ? "正在加载品种" : "暂无可研究品种"} />)}
+          {route.page === "archive" && <>
+            <header className="page-heading"><div><h1>研究档案</h1><p>查看历史研究、原始证据和指定时点的回放。</p></div></header>
+            {latest && <section className="surface plan-detail latest-summary">
+              <div className="section-heading"><div><h2>最近归档的研究判断</h2><p>{formatTimestamp(dashboard?.generatedAt)} · {latest.contract === "—" ? "全市场" : latest.contract}</p></div>
+                <span className="tag">{directionLabel(latest.direction)} · {humanStatus(dashboard?.strategyState ?? "unknown")}</span></div>
+              {latest.path && <p>{latest.path}</p>}{latest.whyNow && <p>{latest.whyNow}</p>}
+            </section>}
+            <ResearchPanel key={route.id ?? "archive"} revision={researchRevision} initialRunId={route.id} />
+            {!!dashboard?.nodes.length && <details className="surface archive-process"><summary>查看研究流程</summary><DecisionRail nodes={dashboard.nodes} activeId={activeNodeId} /></details>}
+          </>}
+        </main>
       </div>
-
-      <div className="runtime-line">
-        <span className={`runtime-dot ${connected ? "is-connected" : ""}`} aria-hidden="true" />
-        <span>{connected ? "本地服务在线" : "本地服务状态未知"}</span>
-        {dashboard?.productCount !== null && dashboard?.productCount !== undefined && (
-          <span>{dashboard.productCount} 个品种</span>
-        )}
-        <HelpTip label="解释系统状态">
-          Codex 状态：{humanStatus(dashboard?.codexState ?? "unknown")}；运行阶段：{humanStatus(dashboard?.runPhase ?? "idle")}；生命周期：{humanStatus(dashboard?.lifecycle ?? "unstarted")}。
-        </HelpTip>
-      </div>
-
-      <div className="research-actions">
-        {!!dashboard?.products.length && (
-          <select aria-label="研究范围" value={product} onChange={(event) => onSelectProduct(event.target.value)} disabled={isRunning}>
-            <option value="">全市场</option>
-            {dashboard.products.map((item) => (
-              <option key={item.symbol} value={item.symbol}>{item.name} · {item.symbol}</option>
-            ))}
-          </select>
-        )}
-        <button
-          className="primary-action topbar-action"
-          type="button"
-          onClick={onUpdate}
-          disabled={isRunning || codexNeedsLogin}
-          aria-label={isRunning ? runMessage || "正在更新策略" : "更新最新策略"}
-          title={codexNeedsLogin ? "请先运行 codex login 并重新加载页面" : undefined}
-        >
-          <span className={isRunning ? "action-spinner" : "action-spark"} aria-hidden="true" />
-          {isRunning ? "正在更新" : "更新最新策略"}
-        </button>
-      </div>
-    </header>
-  );
-}
-
-function Level({ label, value, tone, help }: { label: string; value: string; tone: string; help: string }) {
-  return (
-    <div className={`level level--${tone}`}>
-      <div className="level-label">
-        <span>{label}</span>
-        <HelpTip label={`解释${label}`}>{help}</HelpTip>
-      </div>
-      <strong>{value}</strong>
     </div>
   );
 }
