@@ -17,6 +17,7 @@ from .experiment_view import live_research_policy
 from .live_paper import paper_account, directional_precheck
 from .live_options import collect_option_books, holding_sessions, event_pairs
 from .live_review import validate_agent_review, bind_public_domains
+from .market_psychology import live_observation_context
 from .member_positions import collect_member_positions
 from .agent_sources import collect_agent_sources
 from .models import AgentStrategyPayload, LatestStrategyRecord, StrategyRunAccepted, StrategyRunRequest
@@ -169,8 +170,7 @@ class StrategyService:
                 "holding_sessions": await asyncio.to_thread(holding_sessions, decision_clock),
                 "sources": sources, "options": options, "member_positions": positions, "multipliers": specs,
                 "paper_equity_reference": 200000, "entry_budget": 2000, "fee_per_leg": 3,
-                "technical": [{key: value for key, value in row.model_dump(mode="json").items() if key != "daily_bars"}
-                              for row in capture.observations] if capture else [],
+                "technical": [live_observation_context(row, decision_clock) for row in capture.observations] if capture else [],
             }
             context["directional_precheck"] = directional_precheck(context)
             context["event_pairs"] = event_pairs(context)

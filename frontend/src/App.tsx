@@ -6,53 +6,53 @@ import { DecisionRail } from "./components/DecisionRail";
 import { HelpTip } from "./components/HelpTip";
 import { ProductWorkbench } from "./components/ProductWorkbench";
 import { ResearchPanel } from "./components/ResearchPanel";
-import { StrategyOverview, StrategyPlans } from "./components/StrategyWorkbench";
-import { createStrategyRun, getDashboard, getStrategyRun, getWorkbenchBacktest, subscribeToRun } from "./lib/api";
+import { RollingWorkbench } from "./components/RollingBaseline";
+import { useVisibleResource } from "./lib/useVisibleResource";
+import { createStrategyRun, getDashboard, getStrategyRun, getRollingBaseline, subscribeToRun } from "./lib/api";
 import { directionLabel, formatTimestamp, humanStatus, normalizeDashboard } from "./lib/model";
-import type { DashboardView, RunEvent, StrategyPlan, StrategyRunAccepted, WorkbenchBacktest } from "./types";
+import type { DashboardView, RunEvent, StrategyGroup, StrategyRunAccepted } from "./types";
 
 type LoadState = "loading" | "ready" | "error";
-type Route = { page: "frequency" | "agent" | "overview" | "plans" | "products" | "archive"; id?: string; day?: string };
+type Route = { page: "baseline" | "frequency" | "agent" | "products" | "archive"; id?: string; day?: string };
 
 const pages = [
+  { page: "baseline", label: "半年滚动基线" },
   { page: "frequency", label: "频率与期限对照" },
-  { page: "agent", label: "Agent 策略回测" },
-  { page: "overview", label: "十月回测基线" },
-  { page: "plans", label: "十月基线计划" },
+  { page: "agent", label: "历史 Agent 回放" },
   { page: "products", label: "品种研究" },
   { page: "archive", label: "研究档案" },
 ] as const;
 
 function readRoute(): Route {
-  const [page, id, day] = window.location.hash.slice(1).split("/");
-  if (page === "plans") return { page, id: /^[ABC]$/.test(id ?? "") ? id : "A", day: /^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day : undefined };
-  if (page === "products" || page === "archive") {
-    return { page, id: /^[A-Za-z0-9_-]+$/.test(id ?? "") ? id : undefined };
+  const [page,id,day] = window.location.hash.slice(1).split("/");
+  if (page === "plans" || page === "baseline" || page === "overview") {
+    return {page:"baseline",id:/^[ABC]$/.test(id ?? "") ? id : undefined,day:/^\d{4}-\d{2}-\d{2}$/.test(day ?? "") ? day : undefined};
   }
-  return { page: page === "overview" || page === "agent" ? page : "frequency" };
+  if (page === "products" || page === "archive") return {page,id:/^[A-Za-z0-9_-]+$/.test(id ?? "") ? id : undefined};
+  return {page:page==="frequency" || page==="agent" ? page : "baseline"};
 }
 
 function App() {
   const [route, setRoute] = useState(readRoute);
-  const [backtest, setBacktest] = useState<WorkbenchBacktest | null>(null);
-  const [backtestError, setBacktestError] = useState("");
-
+  const rolling = useVisibleResource(getRollingBaseline, route.page==="baseline" || route.page==="products", route.page==="baseline" ? 60_000 : 0);
   useEffect(() => {
     const change = () => {
-      setRoute(readRoute());
-      window.scrollTo(0, 0);
+      const next = readRoute();
+      if (/^#(?:plans|overview)(?:\/|$)/.test(window.location.hash)) {
+        window.history.replaceState(null, "", `#baseline${next.id ? "/" + next.id : ""}${next.day ? "/" + next.day : ""}`);
+      }
+      setRoute(next);
+      if (!next.id || next.page!=="baseline") window.scrollTo(0,0);
     };
+    change();
     window.addEventListener("hashchange", change);
     return () => window.removeEventListener("hashchange", change);
   }, []);
-
   useEffect(() => {
-    const controller = new AbortController();
-    void getWorkbenchBacktest(controller.signal).then(setBacktest).catch((reason: Error) => {
-      if (!controller.signal.aborted) setBacktestError(reason.message || "回测载入失败。");
-    });
-    return () => controller.abort();
-  }, []);
+    if (route.page==="baseline" && route.id && rolling.data?.plans.length) {
+      document.getElementById("rolling-plan")?.focus();
+    }
+  }, [route, !!rolling.data?.plans.length]);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [dashboard, setDashboard] = useState<DashboardView | null>(null);
   const [error, setError] = useState("");
@@ -227,7 +227,11 @@ function App() {
   }, [activeRunId, dashboard?.runId, dashboard?.runPhase, finishRun]);
 
 
-  const openPlan = (id: StrategyPlan["id"], day?: string) => { window.location.hash = `plans/${id}${day ? `/${day}` : ""}`; };
+  const openPlan = (id: StrategyGroup, day?: string) => {
+    const target = `#baseline/${id}${day ? `/${day}` : ""}`;
+    if (window.location.hash === target) document.getElementById("rolling-plan")?.focus();
+    else window.location.hash = target;
+  };
   const openProduct = (symbol: string) => { window.location.hash = `products/${symbol}`; };
   const openArchive = (runId: string) => { window.location.hash = `archive/${runId}`; };
   const canRun = !!dashboard && !isRunning && !activeRunId && dashboard.codexState !== "authentication_required";
@@ -245,7 +249,7 @@ function App() {
         document.getElementById("workspace-main")?.focus();
       }}>跳到主内容</a>
       <aside className="workspace-sidebar">
-        <a href="#agent" className="workspace-brand"><span className="brand-monogram" aria-hidden="true">期</span><span><strong>期策</strong><small>衍生品研究工作台</small></span></a>
+        <a href="#baseline" className="workspace-brand"><span className="brand-monogram" aria-hidden="true">期</span><span><strong>期策</strong><small>衍生品研究工作台</small></span></a>
         <nav aria-label="工作台导航">{pages.map((item) => (
           <a key={item.page} href={`#${item.page}`} aria-current={route.page === item.page ? "page" : undefined}>{item.label}</a>
         ))}</nav>
@@ -262,13 +266,11 @@ function App() {
           {runMessage && <div className="workspace-run" role="status"><span>{runMessage}</span>{finishedRunId ? <button className="text-action" onClick={() => openArchive(finishedRunId)}>查看本次研究 →</button> : <HelpTip label="解释研究进度">实时连接中断时，工作台会继续查询本地服务中的任务状态。</HelpTip>}</div>}
           {route.page === "frequency" && <FrequencyStudy />}
           {route.page === "agent" && <AgentStudy namesByProduct={Object.fromEntries(products.map(p => [p.symbol, p.name]))} />}
-          {route.page === "overview" && <StrategyOverview data={backtest} error={backtestError} openPlan={openPlan} />}
-          {route.page === "plans" && <>
-            {backtestError && <p className="alert" role="alert">{backtestError}</p>}
-            <StrategyPlans key={`${route.id}/${route.day}`} data={backtest} id={route.id as StrategyPlan["id"]} initialDay={route.day} onSelect={openPlan} openProduct={openProduct} />
-          </>}
+          {route.page === "baseline" && <RollingWorkbench report={rolling.data} error={rolling.error} busy={rolling.busy}
+            refresh={rolling.refresh} selected={route.id as StrategyGroup | undefined} day={route.day} onSelect={openPlan}
+            namesByProduct={Object.fromEntries(products.map(p => [p.symbol, p.name]))} />}
           {route.page === "products" && (symbol
-            ? <ProductWorkbench products={products} symbol={symbol} choose={openProduct} openPlan={openPlan} openArchive={openArchive} backtest={backtest} revision={researchRevision} canRun={canRun} startResearch={(target) => void startRun(target)} />
+            ? <ProductWorkbench products={products} symbol={symbol} choose={openProduct} openPlan={openPlan} openArchive={openArchive} rolling={rolling.data} revision={researchRevision} canRun={canRun} startResearch={(target) => void startRun(target)} />
             : <AsyncState kind={loadState === "loading" ? "loading" : "empty"} title={loadState === "loading" ? "正在加载品种" : "暂无可研究品种"} />)}
           {route.page === "archive" && <>
             <header className="page-heading"><div><h1>研究档案</h1><p>查看历史研究、原始证据和指定时点的回放。</p></div></header>

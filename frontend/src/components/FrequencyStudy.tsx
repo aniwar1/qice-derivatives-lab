@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getFrequencyStudy, getFrequencySession } from "../lib/api";
 import { LineChart } from "./LineChart";
-import { currency, pct } from "./StrategyWorkbench";
+import { currency, pct } from "./PlanPresentation";
 import type { FrequencyResult, FrequencySession, ResearchMode } from "../types";
 
 const modes = {

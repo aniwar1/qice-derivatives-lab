@@ -90,8 +90,8 @@ describe("半年 Agent 回测", () => {
     });
     render(<AgentStudy namesByProduct={namesByProduct} />);
     expect(
-      await screen.findByRole("link", { name: /十月历史基线/ }),
-    ).toHaveAttribute("href", "#overview");
+      await screen.findByRole("link", { name: /半年滚动基线/ }),
+    ).toHaveAttribute("href", "#baseline");
     expect(getFrozenContext).not.toHaveBeenCalled();
   });
   it("按策略和日期检查决策，并按所选品种展示同期证据", async () => {

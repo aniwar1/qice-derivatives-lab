@@ -205,56 +205,6 @@ export interface ResearchReplay {
   invalidation_observed: ResearchObservation | null;
 }
 
-export interface BacktestPoint {
-  day: string;
-  equity: number;
-  return_pct: number;
-  realized: number;
-  open_pnl: number;
-  open_positions: number;
-}
-
-export interface BacktestSession {
-  day: string;
-  information_day: string;
-  outcome: {
-    status: string;
-    reason: string | null;
-    product?: string;
-    contract?: string;
-    direction?: string | null;
-    decision?: string;
-    candidate_count?: number;
-    quantity?: number;
-    paid?: number;
-    fee?: number;
-    reference?: number;
-    event?: { title: string; release_bjt: string; preannounced_source: string; transmission: string };
-    legs?: Array<{ symbol: string; open_price: number }>;
-  };
-  exits: Array<{ trade_id: string; net_pnl: number; reason: string }>;
-}
-
-export interface StrategyPlan {
-  id: "A" | "B" | "C";
-  name: string;
-  style: string;
-  thesis: string;
-  steps: [string, string][];
-  limit: string;
-  curve?: BacktestPoint[];
-  sessions?: BacktestSession[];
-  stats?: {
-    opened: number; closed: number; open_positions: number; equity: number;
-    return_pct: number; drawdown_pct: number; realized: number; open_pnl: number;
-  };
-}
-
-export type WorkbenchBacktest =
-  | { status: "missing"; batch: string; plans: StrategyPlan[] }
-  | { status: "ready"; batch: string; plans: StrategyPlan[]; days: string[]; initial_cash: number;
-      daily_cap: number; fee_per_side: number; covered_products: string[]; configured_count: number; market_sha256: string };
-
 export interface ProductEvidence {
   status: string;
   freshness: string;
@@ -339,3 +289,100 @@ export type FrequencySession = AgentSession & {
 };
 type PairSide = { contract: string; planned_quantity: number; legs: Array<{id: string}>; execution: {entry_cash: number; pnl_yuan: number} };
 export type TermPair = {event_at: string; product: string; entry: string; exit: string; main: PairSide; far: PairSide};
+
+export type StrategyGroup = "A" | "B" | "C";
+export interface RollingPoint {
+  day: string;
+  equity: number | null;
+  raw_equity: number;
+  index_value: number | null;
+  return_pct: number | null;
+  source: "historical" | "forward";
+  open_positions: number;
+  stale_marks: string[];
+}
+export interface RollingSession {
+  day: string;
+  source: "historical" | "forward";
+  cutoff?: string | null;
+  decision: Partial<AgentSession["decision"]> | null;
+  execution: Partial<AgentSession["execution"]>;
+  decision_status?: string;
+  recorded_at?: string;
+  market_sources?: Array<{
+    exchange: string;
+    type: string;
+    https: string;
+    day: string;
+  }>;
+  market_gaps?: unknown[];
+  receipt_key?: string;
+  context_sha256?: string;
+}
+export interface RollingPlan {
+  id: StrategyGroup;
+  variant: ResearchMode;
+  baseline_day: string | null;
+  baseline_equity: number | null;
+  baseline_point: RollingPoint | null;
+  positions?: Array<{
+    entry_day: string;
+    product: string;
+    legs: string[];
+    quantity: number;
+    cost: number;
+    marked_value: number | null;
+    pending_exit: boolean | null;
+  }> | null;
+  latest_day: string | null;
+  sessions: RollingSession[];
+  curve: RollingPoint[];
+  stats: {
+    equity: number | null;
+    raw_equity?: number | null;
+    return_pct: number | null;
+    net_pnl: number | null;
+    raw_net_pnl: number | null;
+    drawdown_pct: number | null;
+    opened: number;
+    closed: number;
+    open_positions: number;
+  };
+}
+export interface RollingBaseline {
+  status: "ready" | "partial" | "missing";
+  start: string;
+  end: string;
+  as_of: string;
+  latest_expected_day: string | null;
+  latest_day: string | null;
+  latest_recorded_at: string | null;
+  freshness: "current" | "behind" | "calendar_unknown" | "missing";
+  missing_days: string[];
+  updater?: {
+    state: string;
+    worker_status?: string | null;
+    reason?: string | null;
+    next_session?: string | null;
+    last_settled?: string | null;
+    last_checked_at: string | null;
+    last_success_at: string | null;
+  };
+  historical_batch: string;
+  historical_end: string | null;
+  assumptions: string[];
+  issues?: string[];
+  plans: RollingPlan[];
+}
+export interface IntradayReference {
+  status: "live" | "partial" | "closed" | "unavailable" | "flat";
+  observed_at: string | null;
+  base_day: string | null;
+  note: string;
+  groups: Array<{
+    id: StrategyGroup;
+    pnl_change: number | null;
+    marked_legs: number;
+    total_legs: number;
+  }>;
+}

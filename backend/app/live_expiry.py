@@ -39,14 +39,14 @@ def expiry_rows(exchange: str, day: date, response: requests.Response) -> dict[s
     return result
 
 
-def collect_expiries(books: list[dict]) -> tuple[list[dict], dict[str, bytes]]:
+def collect_expiries(books: list[dict], *, calendar=None) -> tuple[list[dict], dict[str, bytes]]:
     """按交易所批量下载合约参数，将每条有效期权腿绑定到原表摘要。"""
     if not books:
         return [], {}
     from akshare.futures.cons import get_calendar
 
     now = datetime.now(BJT)
-    days = sorted(date.fromisoformat(v) for v in get_calendar() if date.fromisoformat(v) <= now.date())[-2:]
+    days = sorted(date.fromisoformat(v) for v in (get_calendar() if calendar is None else calendar) if date.fromisoformat(v) <= now.date())[-2:]
     receipts, originals = [], {}
     for exchange in {PRODUCT_EXCHANGES[b["contract"][:-4]] for b in books} & {"CZCE", "SHFE"}:
         for day in reversed(days):

@@ -6,7 +6,7 @@ import type {
   ResearchRun,
   MarketQuote,
   ProductAnalysis,
-  WorkbenchBacktest,
+  RollingBaseline, IntradayReference,
   StrategyRunAccepted,
   StrategyRunRequest,
   StrategyRunView,
@@ -113,8 +113,11 @@ export const getResearchReplay = async (runId: string, at: string, signal?: Abor
   return readJson(await fetch(endpoint(`/api/research/runs/${encodeURIComponent(runId)}/replay${query}`), { signal }));
 };
 
-export const getWorkbenchBacktest = async (signal?: AbortSignal): Promise<WorkbenchBacktest> =>
-  readJson(await fetch(endpoint("/api/workbench/backtest"), { signal }));
+export const getRollingBaseline = async (signal?: AbortSignal): Promise<RollingBaseline> =>
+  readJson(await fetch(endpoint("/api/workbench/rolling-baseline"), { signal, cache: "no-store" }));
+
+export const getIntradayReference = async (signal?: AbortSignal): Promise<IntradayReference> =>
+  readJson(await fetch(endpoint("/api/workbench/rolling-baseline/intraday"), { signal, cache: "no-store" }));
 
 export const getProductAnalysis = async (product: string, signal?: AbortSignal): Promise<ProductAnalysis> =>
   readJson(await fetch(endpoint(`/api/workbench/products/${encodeURIComponent(product)}`), { signal }));

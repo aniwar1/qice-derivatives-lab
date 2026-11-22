@@ -2,17 +2,11 @@ import { useEffect, useState } from "react";
 import type { AgentSession, Study } from "../types";
 import { FrozenProduct } from "./FrozenProduct";
 import { LineChart } from "./LineChart";
-import { COLORS, currency, pct, PlanBadge } from "./StrategyWorkbench";
+import { COLORS, currency, pct, PlanBadge, names, mandates } from "./PlanPresentation";
 import { getAgentStudy } from "../lib/api";
 
 type Group = "A" | "B" | "C";
 const groups: Group[] = ["A", "B", "C"];
-const names = { A: "多因子方向买权", B: "技术择强买权", C: "事件驱动宽跨式" };
-const mandates = {
-  A: "三面证据支持同一方向，才考虑买入单腿。目标位须能覆盖压力成本，单笔预算上限 0.5%。",
-  B: "比较实际月份的趋势、波动和流动性，结合基本面与消息反证，由 Agent 决定买权方向和仓位。",
-  C: "围绕已公布时间表的事件，比较预期波动和同月双腿成本，持有期须覆盖事件。",
-};
 const executions: Record<string, string> = {
   wait: "等待",
   simulated_open: "模拟开仓",
@@ -99,7 +93,7 @@ export function AgentStudy({
             本机暂无半年期 Agent
             回测结果。运行历史回放后，可在这里查看逐日判断和收益曲线。
           </p>
-          <a href="#overview">查看十月历史基线 →</a>
+          <a href="#baseline">查看半年滚动基线 →</a>
         </div>
       )}
       {report && (

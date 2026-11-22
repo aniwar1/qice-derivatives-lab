@@ -402,3 +402,19 @@ summary { cursor: pointer; }
 }
 
 .study-selects { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.baseline-status, .daily-meta, .intraday-strip > div, .intraday-strip ul { display:flex; align-items:center; flex-wrap:wrap; gap:8px 18px; }
+.baseline-status { color:var(--ink-soft); font-size:13px; }
+.baseline-status strong { color:var(--ink); }
+.rolling-card { border-top:3px solid; }
+.rolling-card.selected { box-shadow:0 0 0 1px var(--line); }
+.chart-section, .intraday-strip { padding:clamp(16px,2vw,24px); }
+.intraday-strip { background:var(--panel-raised); }
+.intraday-strip p, .intraday-strip ul { margin:6px 0 0; font-size:13px; }
+.intraday-strip li { list-style:none; }
+.intraday-strip ul { padding:0; }
+.daily-meta { margin:12px 0; }
+#rolling-plan { scroll-margin-top:12px; }
+
+.rolling-gain { margin-top:8px; font-size:13px; color:var(--ink-soft); }
+.rolling-gain strong { color:var(--ink); font-variant-numeric:tabular-nums; }

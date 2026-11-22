@@ -23,7 +23,9 @@ from .db import ActiveRunConflict, StrategyStore
 from .models import StrategyRunAccepted, StrategyRunRequest, StrategyRunView
 from .service import InvalidStrategyScope, StrategyService
 from .sse import run_event_stream
-from . import study_view, experiment_view
+from . import study_view, experiment_view, rolling_view
+from .rolling_intraday import read_intraday
+from .rolling_scheduler import RollingScheduler
 
 
 def create_app(
@@ -37,12 +39,16 @@ def create_app(
     codex = gateway or LocalCodexGateway(configured)
     service = StrategyService(settings=configured, store=repository, gateway=codex)
 
+    updater = RollingScheduler(configured)
+
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         await service.start()
+        updater.start()
         try:
             yield
         finally:
+            await updater.stop()
             await service.stop()
 
     app = FastAPI(
@@ -133,6 +139,31 @@ def create_app(
         }
 
     study_directory = configured.workspace_root / "local-data" / "agent-study" / study_view.BATCH
+
+    @app.get("/api/workbench/rolling-baseline")
+    async def rolling_baseline() -> dict:
+        try:
+            report = await asyncio.to_thread(rolling_view.read_rolling_baseline, configured.workspace_root)
+        except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
+            raise HTTPException(status_code=409, detail="滚动基线档案无法核对，请检查本机归档。") from exc
+        return report | {"updater": dict(updater.state)}
+
+    intraday_lock = asyncio.Lock()
+    intraday_cache = None
+    intraday_until = 0.0
+
+    @app.get("/api/workbench/rolling-baseline/intraday")
+    async def rolling_intraday() -> dict:
+        nonlocal intraday_cache, intraday_until
+        async with intraday_lock:
+            clock = asyncio.get_running_loop().time
+            if intraday_cache is None or clock() >= intraday_until:
+                try:
+                    intraday_cache = await asyncio.to_thread(read_intraday, configured.workspace_root)
+                except (OSError, ValueError, TypeError, KeyError, IndexError) as exc:
+                    raise HTTPException(status_code=409, detail="上次结算持仓暂时无法核对。") from exc
+                intraday_until = clock() + 15
+            return intraday_cache
 
     @app.get("/api/workbench/frequency-study")
     async def frequency_study() -> dict:

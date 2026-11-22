@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { getMarketQuote, getProductAnalysis } from "../lib/api";
 import { formatTimestamp, humanStatus } from "../lib/model";
 import { productWatch } from "../lib/productWatch";
-import type { DashboardView, MarketQuote, ProductAnalysis, ProductEvidence, StrategyPlan, WorkbenchBacktest } from "../types";
+import type { DashboardView, MarketQuote, ProductAnalysis, ProductEvidence, StrategyGroup, RollingBaseline } from "../types";
 import { LineChart } from "./LineChart";
-import { currency, pct, PlanBadge } from "./StrategyWorkbench";
+import { currency, pct, PlanBadge, names } from "./PlanPresentation";
 
 const priceLabel = (value: number) => currency(value);
 const decisionLabels: Record<string, string> = { wait: "等待", futures: "期货研究", long_call: "买方看涨", long_put: "买方看跌" };
@@ -22,7 +22,7 @@ function DomainEvidence({ title, data, empty }: { title: string; data?: ProductE
 }
 
 export function ProductWorkbench({
-  products, symbol, choose, startResearch, canRun, revision, backtest, openPlan, openArchive,
+  products, symbol, choose, startResearch, canRun, revision, rolling, openPlan, openArchive,
 }: {
   products: DashboardView["products"];
   symbol: string;
@@ -30,8 +30,8 @@ export function ProductWorkbench({
   startResearch: (symbol: string) => void;
   canRun: boolean;
   revision: number;
-  backtest: WorkbenchBacktest | null;
-  openPlan: (id: StrategyPlan["id"], day?: string) => void;
+  rolling: RollingBaseline | null;
+  openPlan: (id: StrategyGroup, day?: string) => void;
   openArchive: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
@@ -65,7 +65,8 @@ export function ProductWorkbench({
   const high = recent.flatMap((row) => typeof row.high === "number" && row.high > 0 ? [row.high] : []);
   const low = recent.flatMap((row) => typeof row.low === "number" && row.low > 0 ? [row.low] : []);
   const average = recent.length === 20 ? recent.reduce((sum, bar) => sum + bar.close, 0) / 20 : null;
-  const related = backtest?.plans.flatMap((plan) => (plan.sessions ?? []).filter((session) => session.outcome.product === symbol).map((session) => ({ plan, session }))) ?? [];
+  const related = rolling?.plans.flatMap(plan => plan.sessions.filter(session => session.decision?.product === symbol ||
+    session.execution?.exits?.some(exit => exit.product === symbol)).map(session => ({ plan, session }))) ?? [];
   const visibleProducts = products.filter((item) => `${item.symbol} ${item.name} ${item.exchange}`.toUpperCase().includes(search.trim().toUpperCase()));
   const loadQuote = async () => {
     setQuoteBusy(true); setQuoteFailure(null); setQuote(null);
@@ -131,12 +132,15 @@ export function ProductWorkbench({
               </> : <p>还没有本品种的归档结论。运行单品种分析后可查看取证、反证和失效条件。</p>}</article>
           </div>
         </section>
-        {backtest?.status === "ready" && <section className="surface plan-detail">
-          <div className="section-heading"><h2>三套计划中的历史记录</h2><span className="tag paper-tag">历史模拟</span></div>
-          {!backtest.covered_products.includes(symbol) ? <p className="empty-note">这一批次缺少本品种连续可复核的期权链。</p> : !related.length ? <p className="empty-note">本批行情覆盖该品种，三组组合均未选中开仓。</p> : (
-            <div className="table-scroll"><table><thead><tr><th>策略</th><th>开仓日</th><th>期权腿</th><th>模拟支出</th></tr></thead>
-              <tbody>{related.map(({ plan, session }) => <tr key={`${plan.id}-${session.day}`}><td><button className="text-action" onClick={() => openPlan(plan.id, session.day)}><PlanBadge id={plan.id} /> {plan.name}</button></td><td>{session.day}</td><td>{session.outcome.legs?.map((leg) => leg.symbol).join(" / ")}</td><td>¥{currency(session.outcome.paid ?? 0)}</td></tr>)}</tbody></table></div>
-          )}
+        {rolling && <section className="surface plan-detail">
+          <div className="section-heading"><h2>半年窗口内的策略记录</h2><a href="#baseline">半年滚动基线 →</a></div>
+          {!related.length ? <p className="empty-note">{rolling.status==="missing" ? "暂无基线记录。" : "当前已收录的逐日记录中没有对应本品种的选择或退出。"}</p> :
+            <div className="table-scroll"><table><thead><tr><th>策略</th><th>交易日</th><th>期权腿</th><th>执行</th></tr></thead>
+              <tbody>{related.slice().sort((a,b)=>b.session.day.localeCompare(a.session.day)).map(({plan,session})=><tr key={`${plan.id}-${session.day}`}>
+                <td><button className="text-action" onClick={()=>openPlan(plan.id,session.day)}><PlanBadge id={plan.id} /> {names[plan.id]}</button></td>
+                <td>{session.day}</td><td>{session.decision?.product===symbol ? session.decision.legs?.join(" / ") || "—" : "—"}</td>
+                <td>{session.execution?.exits?.some(x=>x.product===symbol) ? "有平仓" : ({simulated_open:"模拟开仓",wait:"等待",blocked:"已拦截",unfilled:"未成交"}[session.execution?.status ?? ""] ?? "查看日结")}</td>
+              </tr>)}</tbody></table></div>}
         </section>}
       </div>
     </div>

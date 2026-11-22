@@ -15,8 +15,10 @@ API = (ROOT / "backend" / "app" / "main.py").read_text(encoding="utf-8")
 
 
 def test_frontend_keeps_research_workflows_separately_accessible() -> None:
-    assert "<StrategyOverview" in APP
-    assert "<StrategyPlans" in APP
+    rolling = (ROOT / "frontend/src/components/RollingBaseline.tsx").read_text(encoding="utf-8")
+    assert "<RollingWorkbench" in APP
+    assert "<PlanDetail" in rolling and "<Curve" in rolling
+    assert "<AgentStudy" in APP and "<FrequencyStudy" in APP
     assert "<ProductWorkbench" in APP
     assert "<ResearchPanel" in APP
     assert "<DecisionRail" in APP
@@ -42,6 +44,7 @@ def test_frontend_reattaches_to_backend_started_run() -> None:
 
 def test_api_routes_are_declared_before_same_origin_frontend_mount() -> None:
     assert API.index('@app.get("/api/health")') < API.index('app.mount("/"')
+    assert API.index('@app.get("/api/workbench/rolling-baseline")') < API.index('app.mount("/"')
     assert API.index('@app.get("/api/workbench/backtest")') < API.index('app.mount("/"')
     assert API.index('@app.get("/api/workbench/products/{product}")') < API.index('app.mount("/"')
     assert API.index('@app.post(') < API.index('app.mount("/"')
