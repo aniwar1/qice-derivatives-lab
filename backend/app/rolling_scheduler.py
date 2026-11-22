@@ -1,20 +1,19 @@
 """随本地服务运行的半年基线更新器，进程重启后沿已落盘的交易日接续。"""
 
 import asyncio
-from datetime import datetime, time
 import json
 import logging
 import os
-from pathlib import Path
 import signal
 import subprocess
 import sys
+from datetime import datetime, time
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from .config import Settings
 from .rolling_calendar import refresh_calendar
 from .study_view import BATCH
-
 
 BJT = ZoneInfo("Asia/Shanghai")
 LOG = logging.getLogger(__name__)

@@ -1,10 +1,10 @@
 """让基线计算、盘中报价与日结生产者共享同一交易日历。"""
 
+import json
+import logging
 from datetime import date, timedelta
 from functools import lru_cache
 from hashlib import sha256
-import json
-import logging
 from pathlib import Path
 
 import requests
@@ -18,7 +18,7 @@ CALENDAR_URL = (
 
 def _dates(rows):
     if not isinstance(rows, list):
-        raise ValueError("交易日列表格式错误")
+        raise TypeError("交易日列表格式错误")
     days = tuple(date.fromisoformat(d).isoformat() for d in rows)
     if not days or days != tuple(sorted(set(days))):
         raise ValueError("交易日存在重复或顺序错误")

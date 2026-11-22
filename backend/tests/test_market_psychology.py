@@ -46,6 +46,7 @@ def test_market_reaction_uses_visible_versions_and_one_actual_contract():
 
 def test_live_analysis_keeps_only_completed_daily_reactions_before_cutoff():
     from datetime import datetime
+
     from app.market_psychology import live_observation_context
     from app.research_archive import MarketObservation
 

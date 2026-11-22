@@ -2,8 +2,8 @@ import asyncio
 import os
 import sys
 
-from app.config import Settings
 from app import rolling_scheduler as worker
+from app.config import Settings
 
 
 def test_pending_result_is_visible_and_successful_retry_clears_reason(

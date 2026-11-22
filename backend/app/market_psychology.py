@@ -3,7 +3,6 @@
 from datetime import datetime
 from math import isfinite
 
-
 NEWS_REVIEW_GUIDANCE = (
     "对影响本次判断的消息，在消息面说明原始事实、首次可得时间、发布者的职责与利益关系。"
     "区分套保者、投机者及其他可能受益或承压的参与者，给出另一种合理解释。"
