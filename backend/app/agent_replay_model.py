@@ -14,11 +14,15 @@ from pathlib import Path
 from .agent_replay import POLICY, validate_decision, wire_schema
 
 
-def decide(packet, model, cli, timeout=300, feedback=None):
+def decide(packet, model, cli, timeout=300, feedback=None, *, policy=POLICY, retained=None):
     with tempfile.TemporaryDirectory(prefix="qice-frozen-agent-") as tmp:
         folder = Path(tmp)
         schema = folder / "output-schema.json"
-        schema.write_text(json.dumps(wire_schema(packet["products"])), encoding="utf-8")
+        contract = wire_schema(packet["products"])
+        if retained is not None:
+            contract["properties"] = {g: spec for g, spec in contract["properties"].items() if g not in retained}
+            contract["required"] = list(contract["properties"])
+        schema.write_text(json.dumps(contract), encoding="utf-8")
         final = folder / "result.json"
         config = [
             'model_provider="chatgpt-http"',
@@ -64,10 +68,12 @@ def decide(packet, model, cli, timeout=300, feedback=None):
             "-",
         ]
         instruction = (
-            POLICY + "\n等待时必须设置 legs=[]、risk_bps=0、holding_days=0。"
+            policy + "\n等待时必须设置 legs=[]、risk_bps=0、holding_days=0。"
             "C 的事件必须具备引用资料内的 scheduled_at 并且晚于预定交易日09:05北京时间。"
             "未提供有效 scheduled_at 则只能等待。引用证据请使用 market_sources 的键或 documents 的 id。\n"
         )
+        if retained is not None:
+            instruction += "本次只评估输出契约要求的组。其他组的模型判断已独立封存。\n"
         if feedback:
             instruction += (
                 f"上一次结果未通过规则校验：{feedback}。按同一份冻结资料重新判断。\n"
@@ -144,6 +150,10 @@ def decide(packet, model, cli, timeout=300, feedback=None):
         if not complete:
             raise RuntimeError("模型回执缺少 turn.completed")
         result = json.loads(final.read_text(encoding="utf-8"))
+        if retained is not None:
+            if set(result) != set(contract["required"]):
+                raise ValueError("模型返回了本轮范围外的策略")
+            result = retained | result
         validate_decision(result, packet)
         receipt = {
             "model": model,

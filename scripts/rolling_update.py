@@ -4,7 +4,7 @@ import json
 from argparse import ArgumentParser
 from pathlib import Path
 
-from app.rolling_update import tick
+from app.july_daily import tick
 
 if __name__ == "__main__":
     parser = ArgumentParser(description=__doc__)

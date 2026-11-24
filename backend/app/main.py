@@ -23,9 +23,17 @@ from .db import ActiveRunConflict, StrategyStore
 from .models import StrategyRunAccepted, StrategyRunRequest, StrategyRunView
 from .service import InvalidStrategyScope, StrategyService
 from .sse import run_event_stream
-from . import study_view, experiment_view, rolling_view
+from . import study_view, experiment_view, rolling_view, product_history, strategy_overview
 from .rolling_intraday import read_intraday
 from .rolling_scheduler import RollingScheduler
+
+
+class WorkbenchStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if scope["path"] in ("/", "/index.html"):
+            response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        return response
 
 
 def create_app(
@@ -139,6 +147,23 @@ def create_app(
         }
 
     study_directory = configured.workspace_root / "local-data" / "agent-study" / study_view.BATCH
+
+    @app.get("/api/workbench/strategies")
+    async def strategies() -> dict:
+        return await asyncio.to_thread(strategy_overview.overview, configured.workspace_root)
+
+    @app.get("/api/workbench/history")
+    async def history_index() -> dict:
+        return await asyncio.to_thread(product_history.index, configured.workspace_root)
+
+    @app.get("/api/workbench/history/{product}")
+    async def history_detail(product: str) -> dict:
+        try:
+            return await asyncio.to_thread(product_history.detail, configured.workspace_root, product.upper())
+        except KeyError as exc:
+            if exc.args == (product.upper(),):
+                raise HTTPException(status_code=404, detail="该品种不在研究范围内。") from exc
+            raise
 
     @app.get("/api/workbench/rolling-baseline")
     async def rolling_baseline() -> dict:
@@ -372,7 +397,7 @@ def create_app(
     if (frontend_dist / "index.html").is_file():
         # The source trees stay separated; production serves the immutable UI
         # build from the same loopback origin to avoid a second resident server.
-        app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
+        app.mount("/", WorkbenchStaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 
     return app
 

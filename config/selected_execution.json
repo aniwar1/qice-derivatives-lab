@@ -1,0 +1,12 @@
+{
+  "study": "full-budget-execution-1",
+  "validated_through": "2026-11-24",
+  "settlement_revision": "full-order-budget-v1",
+  "protocol_sha256": "21ca2b91bf955f0a06ef471f9c1e2e88dd0c6f6d8538b14ff797c0f1b541e2db",
+  "validation_sha256": "0ca445db610cb57cd4e88b12cf2c4c7533015974afd84c26a5ba5c9a08ae3899",
+  "groups": {
+    "A": "opening",
+    "B": "second_signal",
+    "C": "opening"
+  }
+}

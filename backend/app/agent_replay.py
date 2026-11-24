@@ -360,7 +360,9 @@ def validate_decision(decisions, packet):
             raise ValueError("期权腿不符合冻结交易范围")
         if not set(p["source_ids"]) <= set(d["evidence_ids"]):
             raise ValueError("入场缺少实际行情和期权出处")
-        if not (1 <= d["risk_bps"] <= 100 and 1 <= d["holding_days"] <= 5):
+        fixed_budget = packet.get("strategy_version") in ("fixed-10000-v1", "fixed-10000-split-v2")
+        valid_budget = d["risk_bps"] == 500 if fixed_budget else 1 <= d["risk_bps"] <= 100
+        if not valid_budget or not 1 <= d["holding_days"] <= 5:
             raise ValueError("风险预算或持有时限无效")
         spot = p["technical"]["close"]
         if d["take_profit_close"]:
@@ -399,7 +401,7 @@ def validate_decision(decisions, packet):
                 positive(t["low20"])
                 and positive(t["high20"])
                 and t["low20"] <= target <= t["high20"]
-                and d["risk_bps"] <= 50
+                and (fixed_budget or d["risk_bps"] <= 50)
                 and stressed_profit(target, leg, leg["premium"], p["multiplier"]) > 0
             ):
                 raise ValueError(

@@ -12,7 +12,7 @@ from scripts.collect_replay_market import atomic
 from scripts.expiry_settlement import ABANDON_HASH, ABANDON_URL
 
 from .agent_replay import LEG, positive
-from .agent_replay_account import INITIAL
+from .agent_replay_account import INITIAL, closing_details, position_value
 from .live_expiry import expiry_rows
 from .models import PRODUCT_EXCHANGES
 from .option_expiry import ExpiryIndex
@@ -69,7 +69,7 @@ def inherited_expiries(root, base, accounts, cutoff):
         pos["expiry_legs"] = refs
 
 
-def _daily_table(root, day, sources, exchange, kind):
+def _daily_table(root, day, sources, exchange, kind, market_dir=None):
     source = next(
         (
             r
@@ -80,9 +80,8 @@ def _daily_table(root, day, sources, exchange, kind):
     )
     if not source:
         raise LookupError(f"{day} 缺少{exchange} {kind}结算原件")
-    blob = gzip.decompress(
-        (root / "local-data/rolling-six/market" / source["raw"]).read_bytes()
-    )
+    archive = market_dir or root / "local-data/rolling-six/market"
+    blob = gzip.decompress((archive / source["raw"]).read_bytes())
     if sha256(blob).hexdigest() != source["sha256"]:
         raise ValueError("行情原件摘要不一致")
     rows = {}
@@ -185,6 +184,8 @@ def finish_marks(
     sources,
     prior_peak,
     prior_drawdown,
+    *,
+    market_dir=None,
 ):
     """先执行原成交规则，再按当日真实价格校正未成交腿的账面估值。"""
     tables = {}
@@ -192,7 +193,7 @@ def finish_marks(
     def rows(exchange, kind):
         key = (exchange, kind)
         if key not in tables:
-            tables[key] = _daily_table(root, day, sources, exchange, kind)
+            tables[key] = _daily_table(root, day, sources, exchange, kind, market_dir)
         return tables[key]
 
     used = []
@@ -221,7 +222,7 @@ def finish_marks(
                     "product": pos["product"],
                     "entry_day": pos["day"],
                     "legs": pos["legs"],
-                    "quantity": pos["qty"],
+                    **closing_details(pos, [0.0] * len(pos["legs"])),
                     "pnl": round(-pos["cost"], 2),
                     "opening_debit": round(pos["cost"], 2),
                     "proceeds_after_costs": 0.0,
@@ -251,7 +252,7 @@ def finish_marks(
                 {"leg": leg, "price": settled, "day": day, "sha256": rec["sha256"]}
             )
             values.append(settled)
-        pos["value"] = pos["qty"] * pos["mult"] * sum(values)
+        pos["value"] = position_value(pos, values)
 
     equity = account.cash + sum(p["value"] for p in account.positions)
     account.previous_equity = equity

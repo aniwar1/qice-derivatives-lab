@@ -348,3 +348,214 @@ def test_structured_strangle_scenarios_use_agent_targets_and_summed_premium():
     prop["scenario_high"] = 141
     with pytest.raises(ValueError, match="20日范围"):
         validate_decision({"A": wait, "B": wait, "C": prop}, packet)
+
+
+def test_fixed_budget_buys_whole_lots_from_cash_and_books_next_open_exit():
+    prices, sources = examples()
+    for day in DAYS:
+        prices[day]["option"]["JD2701C105"][4] = 15000
+    packet = build_packet(DAYS[1], DAYS[:1], prices, sources, PRODUCTS, SPECS, [])
+    packet["strategy_version"] = "fixed-10000-v1"
+    account = Account("B")
+    account.previous_equity = 300000
+    order = decision() | {"risk_bps": 500}
+    fill, first = account.process(DAYS[1], order, packet, prices[DAYS[1]])
+    assert fill["budget_cny"] == fill["requested_budget_cny"] == 10000
+    assert fill["quantity"] == 96
+    assert fill["premium_and_fees"] == 9984
+    assert first["equity"] == 200000 - 9984 + 96 * 11 * 10
+    prices[DAYS[2]]["option"]["JD2701C105"][0] = 13
+    close, last = account.process(DAYS[2], decision("wait"), packet, prices[DAYS[2]])
+    assert close["exits"][0]["quantity"] == 96
+    assert last["equity"] == 200000 - 9984 + round(96 * (13 * 10 * 0.99 - 3), 2)
+
+
+def test_fixed_budget_still_respects_combined_legs_exposure_and_liquidity():
+    prices, sources = examples()
+    for day in DAYS:
+        prices[day]["option"]["JD2701P95"] = [8, 10, 7, 9, 15000, 400, 25]
+        prices[day]["option"]["JD2701C105"][4] = 15000
+    packet = build_packet(DAYS[1], DAYS[:1], prices, sources, PRODUCTS, SPECS, [])
+    packet["products"]["JD"]["technical"].update(low20=70, high20=140)
+    packet["strategy_version"] = "fixed-10000-v1"
+    order = decision() | {
+        "legs": ["JD2701C105", "JD2701P95"],
+        "scenario_low": 70,
+        "scenario_high": 140,
+        "invalidation_price": 0,
+        "risk_bps": 500,
+    }
+    account = Account("C")
+    order_terms = {
+        "opening_premium_limit": None,
+        "target_exit_close": None,
+        "size_limit_lots": None,
+        "requested_budget_cny": 10000,
+    }
+    account.positions = [{"product": "FG", "cost": 10000}]
+    fill = account.open(DAYS[1], order, packet, prices[DAYS[1]], order_terms)
+    assert fill["budget_cny"] == 6000
+    assert fill["quantity"] == 31
+    assert fill["premium_and_fees"] == round(31 * (18 * 10 * 1.01 + 6), 2)
+    account.positions.clear()
+    packet["products"]["JD"]["options"][0]["volume"] = 99
+    denied = account.open(DAYS[1], order, packet, prices[DAYS[1]], order_terms)
+    assert denied["status"] == "unfilled" and account.positions == []
+
+
+def split_order():
+    prices, sources = examples()
+    for day in DAYS:
+        prices[day]["option"]["JD2701C105"][4] = 20000
+        prices[day]["option"]["JD2701P95"] = [20, 25, 15, 18, 20000, 1500, 24]
+    packet = build_packet(DAYS[1], DAYS[:1], prices, sources, PRODUCTS, SPECS, [])
+    packet["strategy_version"] = "fixed-10000-split-v2"
+    packet["products"]["JD"]["technical"].update(low20=40, high20=180)
+    order = decision() | {
+        "legs": ["JD2701C105", "JD2701P95"],
+        "risk_bps": 500,
+        "invalidation_price": 0,
+        "scenario_low": 40,
+        "scenario_high": 180,
+    }
+    return prices, packet, order
+
+
+def test_split_leg_budget_independent_size_marks_stress_and_exit():
+    prices, packet, order = split_order()
+    account = Account("C")
+    fill, first = account.process(DAYS[1], order, packet, prices[DAYS[1]])
+    assert [x["quantity"] for x in fill["leg_fills"]] == [48, 24]
+    assert [x["premium_and_fees"] for x in fill["leg_fills"]] == [4992, 4920]
+    assert all(
+        x["budget_cny"] == x["requested_budget_cny"] == 5000 for x in fill["leg_fills"]
+    )
+    assert fill["premium_and_fees"] == 9912
+    assert first["equity"] == 200000 - 9912 + 10 * (48 * 11 + 24 * 18)
+    expected = 48 * (10 * (75 * 0.98 - 10 * 1.02) - 6) + 24 * (10 * (0 - 20 * 1.02) - 6)
+    assert fill["opening_stress"]["upside_net_cny"] == pytest.approx(expected)
+    prices[DAYS[2]]["option"]["JD2701C105"][0] = 12
+    prices[DAYS[2]]["option"]["JD2701P95"][0] = 22
+    prices[DAYS[2]]["option"]["JD2701C105"][4] = 47
+    blocked_exit, pending = account.process(
+        DAYS[2], decision("wait"), packet, prices[DAYS[2]]
+    )
+    assert blocked_exit["exits"] == [] and pending["pending_exits"] == 1
+    prices[DAYS[2]]["option"]["JD2701C105"][4] = 48
+    closed, point = account.process(
+        "2026-05-25", decision("wait"), packet, prices[DAYS[2]]
+    )
+    credits = [48 * (12 * 10 * 0.99 - 3), 24 * (22 * 10 * 0.99 - 3)]
+    assert point["equity"] == pytest.approx(200000 - 9912 + sum(credits))
+    assert [
+        x["proceeds_after_costs"] for x in closed["exits"][0]["leg_fills"]
+    ] == pytest.approx(credits)
+    assert len(account.positions) == 0
+
+
+def test_split_order_is_rejected_when_remaining_cash_cannot_fund_full_pair():
+    prices, packet, order = split_order()
+    account = Account("C")
+    account.cash = 6000
+    fill, _ = account.process(DAYS[1], order, packet, prices[DAYS[1]])
+    assert fill["status"] == "blocked" and fill["target_quantities"] == [48, 24]
+    assert (
+        fill["target_debit"] == 9912 and account.cash == 6000 and not account.positions
+    )
+    account = Account("C")
+    prices[DAYS[1]]["option"]["JD2701P95"][0] = 501
+    refused, point = account.process(DAYS[1], order, packet, prices[DAYS[1]])
+    assert refused["status"] == "unfilled"
+    assert account.cash == 200000 and point["open_positions"] == 0
+
+
+def test_split_cost_stress_can_reject_an_equal_lot_profitable_scenario():
+    from app.agent_replay_account import strangle_scenarios
+
+    prices, packet, order = split_order()
+    order.update(scenario_low=60, scenario_high=110)
+    product = packet["products"]["JD"]
+    lookup = {leg["id"]: leg for leg in product["options"]}
+    legs = [lookup[symbol] for symbol in order["legs"]]
+    premiums = [leg["premium"] for leg in legs]
+    assert strangle_scenarios(product, legs, premiums, order)["eligible"]
+    account = Account("C")
+    execution, point = account.process(DAYS[1], order, packet, prices[DAYS[1]])
+    assert execution["status"] == "blocked"
+    stress = execution["prior_close_stress"]
+    assert stress["downside_net_cny"] < 0 and stress["upside_net_cny"] < 0
+    assert point["open_positions"] == 0 and point["equity"] == 200000
+
+
+def test_full_pair_october_14_apple_keeps_both_targets_or_fills_neither():
+    _, _, order = split_order()
+    day = "2026-10-14"
+    call, put = "AP2701C6800", "AP2701P6700"
+    packet = {
+        "strategy_version": "fixed-10000-split-v2",
+        "documents": [],
+        "products": {
+            "AP": {
+                "multiplier": 10,
+                "exchange": "CZCE",
+                "technical": {"contract": "AP2701", "low20": 6626, "high20": 7631},
+                "options": [
+                    {
+                        "id": call,
+                        "side": "C",
+                        "premium": 229.5,
+                        "strike": 6800,
+                        "volume": 898,
+                    },
+                    {
+                        "id": put,
+                        "side": "P",
+                        "premium": 221,
+                        "strike": 6700,
+                        "volume": 819,
+                    },
+                ],
+            }
+        },
+    }
+    order.update(product="AP", legs=[call, put], scenario_low=6626, scenario_high=7350)
+    bars = {
+        "future": {"AP2701": [6744, 6744, 6240, 6242, 320355, 170103, None]},
+        "option": {
+            call: [190, 190, 66, 66.5, 1494, 775, 27.54],
+            put: [224, 542.5, 224, 542.5, 897, 400, 27.12],
+        },
+    }
+    account = Account("C")
+    account.cash = 6694.6
+    refused, _ = account.process(day, order, packet, bars)
+    assert refused["status"] == "blocked"
+    assert refused["target_quantities"] == [2, 2] and refused["target_debit"] == 8374.8
+    assert not account.positions and account.cash == 6694.6
+    account = Account("C")
+    fill, _ = account.process(day, order, packet, bars)
+    assert [f["premium_and_fees"] for f in fill["leg_fills"]] == [3844, 4530.8]
+    assert all(f["budget_cny"] == 5000 for f in fill["leg_fills"])
+
+
+def test_full_directional_order_rejects_partial_cash_volume_or_explicit_lot_cap():
+    prices, packet, choice = split_order()
+    order = choice | {"legs": ["JD2701C105"], "invalidation_price": 95}
+    bars = prices[DAYS[1]]
+    for cash, volume, maximum in [
+        (594.84, 20000, 0),
+        (200000, 200, 0),
+        (200000, 20000, 1),
+    ]:
+        account = Account("B")
+        account.cash = cash
+        next(l for l in packet["products"]["JD"]["options"] if l["side"] == "C")[
+            "volume"
+        ] = volume
+        result, _ = account.process(
+            DAYS[1], order | {"max_lots": maximum}, packet, bars
+        )
+        assert result["status"] in {"blocked", "unfilled"} and result[
+            "target_quantities"
+        ] == [96]
+        assert not account.positions and account.cash == cash

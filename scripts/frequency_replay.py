@@ -11,19 +11,19 @@ from hashlib import sha256
 from pathlib import Path
 
 from app.agent_replay import GROUPS, digest
-from app.agent_replay_account import Account
+from app.agent_replay_account import Account, position_value
 from app.frequency_account import account_state, prefer, segment, select_order
 from app.frequency_model import infer
 from app.frequency_policy import POLICY, PROTOCOL, schema, signal_input
 
-from scripts.agent_replay import atomic, identity, load
+from scripts.agent_replay import atomic, load, matches_archived_identity
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def research_day(day, source, output, source_key, model, cli, contract, only_settle):
     packet = load(source / "receipts" / source_key / "context.json")
-    if packet["trade_date"] != day or identity(packet, "gpt-6.2-sol") != source_key:
+    if packet["trade_date"] != day or not matches_archived_identity(packet, "gpt-6.2-sol", source_key):
         raise ValueError("原始冻结上下文摘要错误")
     model_input = signal_input(packet)
     prompt = (
@@ -88,7 +88,7 @@ def asof_nav(account, market, history, metadata, cutoff, universe):
                 continue
             rows = [market[day]["option"].get(leg) for leg in pos["legs"]]
             if all(r and r[3] and r[3] > 0 and r[4] and r[4] > 0 for r in rows):
-                value += pos["qty"] * pos["mult"] * sum(r[3] for r in rows)
+                value += position_value(pos, [r[3] for r in rows])
                 break
         else:
             day = None

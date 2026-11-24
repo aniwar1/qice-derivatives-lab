@@ -12,7 +12,7 @@ from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from scripts.agent_replay import atomic, identity, load, read_receipt
+from scripts.agent_replay import atomic, matches_archived_identity, load, read_receipt
 from scripts.collect_replay_market import collect, parse
 
 from .agent_replay import BJT, GROUPS, build_packet, digest, validate_decision
@@ -142,7 +142,7 @@ def _seed_record(root):
         key = original["contexts"][day]
         folder = base / "receipts" / key
         packet = load(folder / "context.json")
-        if packet["trade_date"] != day or identity(packet, original["model"]) != key:
+        if packet["trade_date"] != day or not matches_archived_identity(packet, original["model"], key):
             raise ValueError("基线模型输入未通过校验")
         receipt = read_receipt(folder / "decision.json", packet, original["model"], key)
         for g, account in accounts.items():
@@ -208,10 +208,11 @@ def _upgrade_seed(root, old):
     return _read(folder / "seed.json")
 
 
-def _market(root, day):
+def _market(root, day, *, refresh_exchanges=(), frozen_sources=()):
     """每类日行情仅从已校验的交易所原件恢复，缺失接口独立重试。"""
     archive = _folder(root) / "market"
     universe = PRODUCT_EXCHANGES
+    frozen = {(s["exchange"], s["type"]): s for s in frozen_sources}
     jobs = [
         (ex, k) for ex in sorted(set(universe.values())) for k in ("future", "option")
     ]
@@ -219,7 +220,12 @@ def _market(root, day):
     def fetch(job):
         ex, kind = job
         try:
-            r = collect(archive, universe, day, ex, kind)
+            if job in frozen:
+                r = frozen[job]
+            elif ex in refresh_exchanges:
+                r = collect(archive, universe, day, ex, kind, reobserve=True)
+            else:
+                r = collect(archive, universe, day, ex, kind)
             if r["day"] != day or r["exchange"] != ex or r["type"] != kind:
                 raise ValueError("原件身份错误")
             blob = gzip.decompress((archive / r["raw"]).read_bytes())
@@ -466,11 +472,9 @@ def _history(root, last, prior):
     for day in prior:
         if day <= seed["day"]:
             continue
-        mark = (
-            last
-            if day == last["day"]
-            else _read(folder / "settlements" / f"{day}.json")
-        )
+        market_day = root / "local-data/july-strategy/market-days" / f"{day}.json"
+        archived = market_day if market_day.exists() else folder / "settlements" / f"{day}.json"
+        mark = last if day == last["day"] else _read(archived)
         market[day] = {"future": {}, "option": {}}
         for row in mark["market_sources"]:
             raw = gzip.decompress((folder / "market" / row["raw"]).read_bytes())
@@ -493,7 +497,12 @@ def _packet(root, last, next_day, calendar):
     market, index = _history(root, last, prior)
     # 收盘结算后才恢复的交易所也可进入研究，此处再次尝试本次交易日各原件。
     if prior[-1] > last["baseline_end"]:
-        prices, sources, _ = _market(root, prior[-1])
+        fixed_archive = root / "local-data/july-strategy/market-days" / f"{prior[-1]}.json"
+        if fixed_archive.exists():
+            # 已结算的版本继续供盘前研究使用，缺失的交易所仍可补采。
+            prices, sources, _ = _market(root, prior[-1], frozen_sources=last["market_sources"])
+        else:
+            prices, sources, _ = _market(root, prior[-1])
         market[prior[-1]] = prices
         for r in sources:
             index[r["day"], r["exchange"], r["type"]] = r
@@ -590,20 +599,24 @@ def _packet(root, last, next_day, calendar):
     return packet
 
 
-def _prefetch(root, last, day, calendar):
+def _prefetch(root, last, day, calendar, *, stage_root=None):
     """盘后定时预采；仅采用截止前已落盘的完整版本。"""
-    folder = _folder(root) / "staged" / day
+    folder = (stage_root or _folder(root)) / "staged" / day
     now = _now()
     cutoff = _time(last["day"], 20)
     if not _time(last["day"], 16) <= now < cutoff:
         raise DataGap("资料预采窗口已关闭")
     versions = sorted(folder.glob("*.json"))
     if versions:
-        stamp = datetime.fromisoformat(_read(versions[-1])["recorded_at"])
+        previous = _read(versions[-1])
+        stamp = datetime.fromisoformat(previous["recorded_at"])
+        same_account = not stage_root or previous["packet"].get("previous_account_sha256") == last["sha256"]
         interval = 10 if now.hour == 19 else 45
-        if (now - stamp).total_seconds() < interval * 60:
+        if same_account and (now - stamp).total_seconds() < interval * 60:
             return {"status": "evidence_ready", "staged_at": stamp.isoformat()}
     packet = _packet(root, last, day, calendar)
+    if stage_root:
+        packet["fixed_paper_accounts"] = packet.pop("paper_accounts")
     stamp = _now()
     if stamp >= cutoff:
         raise DataGap("本轮预采跨过20点，保留更早已封存的资料")

@@ -52,7 +52,7 @@ def live_observation_context(observation, cutoff):
     return entry
 
 
-def attach_reaction_history(packet, days, market, source_index):
+def attach_reaction_history(packet, days, market, source_index, *, historical=False):
     """给前向模型提供同月合约的最近五日价量仓，只引用截止前可得的原件。"""
     cutoff = datetime.fromisoformat(packet["cutoff"])
     for product, context in packet["products"].items():
@@ -66,7 +66,7 @@ def attach_reaction_history(packet, days, market, source_index):
             row = market.get(day, {}).get("future", {}).get(contract)
             if not source or not row or len(row) < 6:
                 continue
-            observed = source.get("retrieved_at")
+            observed = source.get("historical_available_at" if historical else "retrieved_at")
             if (
                 not observed
                 or datetime.fromisoformat(observed) > cutoff
@@ -92,6 +92,7 @@ def attach_reaction_history(packet, days, market, source_index):
                     "sha256",
                     "retrieved_at",
                     "disclosed_available_at",
+                    "historical_available_at",
                 )
                 if k in source
             }

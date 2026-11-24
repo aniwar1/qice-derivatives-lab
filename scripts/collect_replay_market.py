@@ -218,25 +218,42 @@ def revision_metadata(exchange, day, blob, last_modified=None):
     return {"disclosed_available_at": max(modified, disclosed or modified).isoformat()}
 
 
-def collect(out, universe, day, exchange, kind):
+def collect(out, universe, day, exchange, kind, *, reobserve=False):
     url, kwargs = request_spec(exchange, kind, day)
     stem = out / "raw" / exchange / f"{day}-{kind}"
     content = stem.with_suffix(".gz")
     receipt = stem.with_suffix(".json")
-    if receipt.exists():
-        row = json.loads(receipt.read_bytes())
-        blob = gzip.decompress(content.read_bytes())
+    versions = out / "versions" / exchange / day / kind
+    latest = versions / "latest.json"
+
+    def archived(path):
+        row = json.loads(path.read_bytes())
+        blob = gzip.decompress((out / row["raw"]).read_bytes())
         if hashlib.sha256(blob).hexdigest() != row["sha256"]:
             raise ValueError("已归档原件摘要变化")
         return row | revision_metadata(exchange, day, blob, row.get("last_modified"))
-    response = requests.request(
-        "POST" if kwargs else "GET", url, **kwargs, timeout=(5, 18)
-    )
-    response.raise_for_status()
+    if not reobserve and receipt.exists():
+        return archived(receipt)
+    try:
+        response = requests.request(
+            "POST" if kwargs else "GET", url, **kwargs, timeout=(5, 18)
+        )
+        response.raise_for_status()
+    except OSError:
+        # 补采中断时仍可用已观察的候选，完整性要继续经过正式结算校验。
+        if reobserve and latest.is_file():
+            return archived(latest)
+        if reobserve and receipt.is_file():
+            return archived(receipt)
+        raise
     if urlsplit(response.url).hostname != urlsplit(url).hostname:
         raise ValueError("发布主体变化")
     blob = response.content
     _, counts = parse(exchange, kind, day, blob, universe)
+    checksum = hashlib.sha256(blob).hexdigest()
+    if reobserve:
+        # 新观测独立保存，后续修订不能替换已被日结或盘前材料引用的原件。
+        content = versions / (checksum + ".gz")
     row = {
         "day": day,
         "exchange": exchange,
@@ -244,14 +261,26 @@ def collect(out, universe, day, exchange, kind):
         "https": url,
         "request": kwargs,
         "retrieved_at": datetime.now(timezone.utc).isoformat(),
-        "sha256": hashlib.sha256(blob).hexdigest(),
+        "sha256": checksum,
         "raw": str(content.relative_to(out)),
         "configured_product_rows": dict(counts),
         "last_modified": response.headers.get("Last-Modified"),
         **revision_metadata(exchange, day, blob, response.headers.get("Last-Modified")),
     }
-    atomic(content, gzip.compress(blob, compresslevel=2, mtime=0))
-    store_json(receipt, row)
+    if not reobserve or not content.exists():
+        atomic(content, gzip.compress(blob, compresslevel=2, mtime=0))
+    if reobserve:
+        first_seen = versions / (checksum + ".json")
+        if first_seen.exists():
+            row = archived(first_seen)
+        else:
+            if receipt.exists() and json.loads(receipt.read_bytes())["sha256"] == checksum:
+                # 相同字节沿最早可核实的取得时刻，避免补采后抹去历史可见性。
+                row = archived(receipt) | {"raw": row["raw"]}
+            store_json(first_seen, row)
+        store_json(latest, row)
+    else:
+        store_json(receipt, row)
     return row
 
 

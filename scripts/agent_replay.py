@@ -58,7 +58,7 @@ def load(path):
     return json.loads(path.read_bytes())
 
 
-def identity(packet, model):
+def identity(packet, model, *, runner=None):
     # 冻结模型、规则、契约及全部上下文，防止跨版本误复用。
     return digest(
         {
@@ -66,10 +66,18 @@ def identity(packet, model):
             "model": model,
             "policy": POLICY,
             "schema": wire_schema(packet["products"]),
-            "runner": sha256(
+            "runner": runner or sha256(
                 (ROOT / "backend/app/agent_replay_model.py").read_bytes()
             ).hexdigest(),
         }
+    )
+
+
+def matches_archived_identity(packet, model, key):
+    # 旧版档案冻结了运行器源码摘要，保留当时的完整身份校验。
+    return key in (
+        identity(packet, model),
+        identity(packet, model, runner="a45d81a97db6b255c0c8fb1991e58f44579887c3455f55fae19496c90ace0806"),
     )
 
 
@@ -358,7 +366,7 @@ def settle_frozen(study):
         key = original["contexts"][day]
         root = study / "receipts" / key
         packet = load(root / "context.json")
-        if packet["trade_date"] != day or identity(packet, model) != key:
+        if packet["trade_date"] != day or not matches_archived_identity(packet, model, key):
             raise ValueError("冻结的任务上下文不匹配")
         receipts[day] = read_receipt(root / "decision.json", packet, model, key)
         packets[day] = packet
